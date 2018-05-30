@@ -72,14 +72,14 @@ typedef struct LheContext {
     int yfin;
     uint16_t dif_frames_count;
     int skip_frames;
-    Rectangle protected_rectangles[MAX_RECTANGLES];
+    Prot_Rectangle protected_rectangles[MAX_RECTANGLES];
     uint8_t down_mode_p;
     int down_mode_reconf;
     bool color;
     bool pr_metrics_active;
     int ql_reconf;
     int skip_frames_reconf;
-    Rectangle protected_rectangles_reconf[MAX_RECTANGLES];
+    Prot_Rectangle protected_rectangles_reconf[MAX_RECTANGLES];
     uint8_t down_mode_p_reconf;
     bool color_reconf;
     bool pr_metrics_active_reconf;
@@ -1669,8 +1669,8 @@ static int lhe_advanced_write_file2(AVCodecContext *avctx, AVPacket *pkt,
     put_bits(&s->pb, PIXEL_FMT_SIZE_BITS, pixel_format);    
       */  
     //save width and height
-    //put_bits32(&s->pb, procY->width);
-    //put_bits32(&s->pb, procY->height);    
+    put_bits32(&s->pb, procY->width);
+    put_bits32(&s->pb, procY->height);    
 
 
     //Save first pixel for each block
@@ -3494,6 +3494,10 @@ static int mlhe_advanced_write_delta_frame2(AVCodecContext *avctx, AVPacket *pkt
     
     //Lhe mode byte
     put_bits(&s->pb, LHE_MODE_SIZE_BITS, lhe_mode);
+
+    //save width and height
+    put_bits32(&s->pb, procY->width);
+    put_bits32(&s->pb, procY->height); 
 
     //Save first delta for each block
     //for (i=0; i<total_blocks; i++) 

@@ -2562,8 +2562,19 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
          
     if (s->lhe_mode == DELTA_MLHE) { /*DELTA VIDEO FRAME*/      
         
-        image_size_Y = (&s->procY)->width * (&s->procY)->height;
-        image_size_UV = (&s->procUV)->width * (&s->procUV)->height; 
+        //image_size_Y = (&s->procY)->width * (&s->procY)->height;
+        //image_size_UV = (&s->procUV)->width * (&s->procUV)->height; 
+
+        (&s->procY)->width = get_bits(&s->gb, 32);
+        (&s->procY)->height = get_bits(&s->gb, 32);
+        (&s->procUV)->width = ((&s->procY)->width - 1)/s->chroma_factor_width+1;
+        (&s->procUV)->height = ((&s->procY)->height - 1)/s->chroma_factor_height+1;
+
+        image_size_Y =  (&s->procY)->width * (&s->procY)->height;
+        image_size_UV = (&s->procUV)->width * (&s->procUV)->height;
+
+        avctx->width = (&s->procY)->width;
+        avctx->height = (&s->procY)->height;
         
         //Allocates frame
         av_frame_unref(s->frame);
@@ -2622,8 +2633,17 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
     {   
         s->global_frames_count++;
         
-        image_size_Y = (&s->procY)->width * (&s->procY)->height;
+        (&s->procY)->width = get_bits(&s->gb, 32);
+        (&s->procY)->height = get_bits(&s->gb, 32);
+        (&s->procUV)->width = ((&s->procY)->width - 1)/s->chroma_factor_width+1;
+        (&s->procUV)->height = ((&s->procY)->height - 1)/s->chroma_factor_height+1;
+
+        image_size_Y =  (&s->procY)->width * (&s->procY)->height;
         image_size_UV = (&s->procUV)->width * (&s->procUV)->height;
+
+        avctx->width = (&s->procY)->width;
+        avctx->height = (&s->procY)->height;
+        
         //Allocates frame
         av_frame_unref(s->frame);
         if ((ret = ff_get_buffer(avctx, s->frame, 0)) < 0)
