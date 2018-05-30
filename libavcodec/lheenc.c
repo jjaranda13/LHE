@@ -1669,8 +1669,8 @@ static int lhe_advanced_write_file2(AVCodecContext *avctx, AVPacket *pkt,
     put_bits(&s->pb, PIXEL_FMT_SIZE_BITS, pixel_format);    
       */  
     //save width and height
-    put_bits32(&s->pb, procY->width);
-    put_bits32(&s->pb, procY->height);    
+    //put_bits32(&s->pb, procY->width);
+    //put_bits32(&s->pb, procY->height);    
 
 
     //Save first pixel for each block
@@ -3496,8 +3496,8 @@ static int mlhe_advanced_write_delta_frame2(AVCodecContext *avctx, AVPacket *pkt
     put_bits(&s->pb, LHE_MODE_SIZE_BITS, lhe_mode);
 
     //save width and height
-    put_bits32(&s->pb, procY->width);
-    put_bits32(&s->pb, procY->height); 
+    //put_bits32(&s->pb, procY->width);
+    //put_bits32(&s->pb, procY->height); 
 
     //Save first delta for each block
     //for (i=0; i<total_blocks; i++) 
