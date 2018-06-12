@@ -154,7 +154,7 @@ static const uint8_t lhe_sig[3] = "LHE";
 #define PPP_MAX_IMAGES 64 //this value allows to compress images up to 4096 px widthwise
 #define PPP_MIN 1
 
-#define MAX_RECTANGLES 5
+#define MAX_RECTANGLES 100
 
 
 
