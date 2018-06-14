@@ -424,6 +424,9 @@ static int lhe_alloc_tables(AVCodecContext *ctx, LheContext *s)
 static void lhe_process_non_persistent_rectangles (LheContext *s)
 {
 
+	if (s->rectangle_list == NULL)
+		return;
+	
 	char *token = strtok(s->rectangle_list, ",");
 	int i = 0;
 	int j = 0;
@@ -3913,7 +3916,7 @@ static const AVOption options[] = {
     { "yini", "asdf", OFFSET(yini), AV_OPT_TYPE_INT, { .i64 = 0 }, -100, 30000, VE },
     { "yfin", "asdf", OFFSET(yfin), AV_OPT_TYPE_INT, { .i64 = 0 }, -100, 30000, VE },
     { "down_mode", "0 -> SPS, 1 -> AVG, 2 -> AVGY+SPSX", OFFSET(down_mode_reconf), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 2, VE },
-    { "ski_frames", "asdf", OFFSET(skip_frames_reconf), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 100, VE },
+    { "skip_frames", "asdf", OFFSET(skip_frames_reconf), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 100, VE },
     { NULL },
 };
 
