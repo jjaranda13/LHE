@@ -76,6 +76,7 @@ typedef struct LheContext {
     uint16_t dif_frames_count;
     int skip_frames;
     Prot_Rectangle protected_rectangles[MAX_RECTANGLES];
+    int rectangles_TTL;
     char *rectangle_list;
     uint8_t down_mode_p;
     int down_mode_reconf;
@@ -83,7 +84,6 @@ typedef struct LheContext {
     bool pr_metrics_active;
     int ql_reconf;
     int skip_frames_reconf;
-    Prot_Rectangle protected_rectangles_reconf[MAX_RECTANGLES];
     uint8_t down_mode_p_reconf;
     bool color_reconf;
     bool pr_metrics_active_reconf;
@@ -429,6 +429,13 @@ static void lhe_process_non_persistent_rectangles (LheContext *s)
 	int j = 0;
 	int index = 0;
 
+	if (token != NULL)
+	{
+		s->rectangles_TTL = atoi(token);
+		token = strtok(NULL, ",");
+	}
+
+
 	while (token != NULL)
 	{
 
@@ -458,6 +465,16 @@ static void lhe_process_non_persistent_rectangles (LheContext *s)
 
 	s->rectangle_list[0] = 0;
 
+	if (s->rectangles_TTL > 0)
+	{
+		s->rectangles_TTL -= 1;
+		if (s->rectangles_TTL == 0)	
+		{
+			s->protected_rectangles[0].active = 0;
+		}
+	}
+	
+
 	/*int k = 0;
 
 	for (k = 0; k <= j; k++)
@@ -467,26 +484,6 @@ static void lhe_process_non_persistent_rectangles (LheContext *s)
 			s->protected_rectangles[k].yfin);
 	}*/
 	
-
-	/*int i, j, active_rectangles_counter;
-	char num[10];
-
-	active_rectangles_counter = 0;
-	i, j = 0;
-
-	while(s->rectangle_list[i] != 0) 
-	{
-		if (s->rectangle_list[i] != ',')
-		{
-			num[j] = s->rectangle_list[i]
-			j++;
-		}
-		else 
-			break;
-	}
-
-	num[j] = 0;
-	*/
 }
 
 /**
@@ -586,13 +583,6 @@ static void mlhe_reconfig (AVCodecContext *avctx, LheContext *s)
     if (s->color_reconf != -1 && s->color != s->color_reconf)
         s->color = s->color_reconf;
 
-    /*s->protected_rectangles[s->num_rectangle].active = s->active;
-    s->protected_rectangles[s->num_rectangle].protection = s->protection;
-    s->protected_rectangles[s->num_rectangle].xini = s->xini;
-    s->protected_rectangles[s->num_rectangle].xfin = s->xfin;
-    s->protected_rectangles[s->num_rectangle].yini = s->yini;
-    s->protected_rectangles[s->num_rectangle].yfin = s->yfin;
-*/
     lhe_process_non_persistent_rectangles (s);
 
     /*int k = 0;
@@ -608,25 +598,6 @@ static void mlhe_reconfig (AVCodecContext *avctx, LheContext *s)
     av_log(NULL, AV_LOG_INFO, "IMPRIME LA LISTA\n");
     av_log(NULL, AV_LOG_INFO, "Recibido en la lista: %s\n", s->rectangle_list);
 */
-    /*s->protected_rectangles[0].active = 1;
-    s->protected_rectangles[0].xini = -50;
-    s->protected_rectangles[0].xfin = 1000;
-    s->protected_rectangles[0].yini = -50;
-    s->protected_rectangles[0].yfin = 600;
-    s->protected_rectangles[0].protection = 0;
-
-    s->protected_rectangles[1].active = 1;
-    s->protected_rectangles[1].xini = 200;
-    s->protected_rectangles[1].xfin = 750;
-    s->protected_rectangles[1].yini = 100;
-    s->protected_rectangles[1].yfin = 300;
-    s->protected_rectangles[1].protection = 1;
-    */
-    //av_log(NULL, AV_LOG_INFO, "num_rectangle %d; active %d, protection %d; xini %d; xfin %d; yini %d; yfin %d\n", s->num_rectangle, s->protected_rectangles[s->num_rectangle].active , s->protected_rectangles[s->num_rectangle].protection, 
-    //    s->protected_rectangles[s->num_rectangle].xini, s->protected_rectangles[s->num_rectangle].xfin, s->protected_rectangles[s->num_rectangle].yini, s->protected_rectangles[s->num_rectangle].yfin);
-
-    //s->protected_rectangles[s->num_rectangle] = s->protected_rectangles_reconf[s->num_rectangle];
-
     if (s->pr_metrics_active != s->pr_metrics_active_reconf)
         s->pr_metrics_active = s->pr_metrics_active_reconf;
     s->skip_frames = s->skip_frames_reconf;
@@ -2639,10 +2610,8 @@ static void lhe_advanced_compute_perceptual_relevance (LheContext *s, uint8_t *c
 
             for (int i = 0; i < MAX_RECTANGLES; i++){
                 if (s->protected_rectangles[i].active) {
-                    if ((s->protected_rectangles[i].xfin <= xini_pr_block) || (s->protected_rectangles[i].xini >= xfin_pr_block) || 
-                    	(s->protected_rectangles[i].yini >= yfin_pr_block) || (s->protected_rectangles[i].yfin <= yfin_pr_block)) {
-
-                    } else {
+                    if (!((s->protected_rectangles[i].xfin <= xini_pr_block) || (s->protected_rectangles[i].xini >= xfin_pr_block) || 
+                    	(s->protected_rectangles[i].yini >= yfin_pr_block) || (s->protected_rectangles[i].yfin <= yfin_pr_block))) {
                     	//xini_pr_block >= s->protected_rectangles[i].xini && xfin_pr_block < s->protected_rectangles[i].xfin 
                         //&& yini_pr_block >= s->protected_rectangles[i].yini && yfin_pr_block < s->protected_rectangles[i].yfin
                         if (s->protected_rectangles[i].protection == 1) {
