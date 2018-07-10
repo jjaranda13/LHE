@@ -54,6 +54,8 @@ uint8_t *intermediate_interpolated_Y, *intermediate_interpolated_U, *intermediat
 uint8_t *delta_prediction_Y_dec, *delta_prediction_U_dec, *delta_prediction_V_dec;
 uint8_t *intermediate_adapted_downsampled_data_Y_dec, *intermediate_adapted_downsampled_data_U_dec, *intermediate_adapted_downsampled_data_V_dec;
 uint8_t *adapted_downsampled_image_Y, *adapted_downsampled_image_U, *adapted_downsampled_image_V;
+double timecount;
+
 
 static void lhe_init_pixel_format (AVCodecContext *avctx, LheState *s)
 {
@@ -77,8 +79,8 @@ static void lhe_init_pixel_format (AVCodecContext *avctx, LheState *s)
     } else
     {
         avctx->pix_fmt = AV_PIX_FMT_YUV420P;
-        avctx->width = 1280;//512;
-        avctx->height = 720;//384;
+        avctx->width = 512;//512;
+        avctx->height = 512;//384;
         av_log(NULL, AV_LOG_INFO, "Pix fmt 420 con el else\n");
         s->chroma_factor_width = 2;
         s->chroma_factor_height = 2;
@@ -317,6 +319,8 @@ static av_cold int lhe_decode_init(AVCodecContext *avctx)
     lhe_init_cache2(&s->prec);
     
     s->global_frames_count = 0;
+
+    timecount = 0;
     
     return 0;
 }
@@ -539,35 +543,13 @@ static void lhe_advanced_read_file_symbols (LheState *s, LheHuffEntry *he, LhePr
     }
 }
 
-static uint8_t set_bit(uint8_t data, int possition) {
-
-    uint8_t mask = 1;
-    mask = mask << possition;
-    mask = mask | data;
-    return mask;
-}
-
-static int get_rlc_number(LheState *s, int rlc_lenght) {
-    int rlc_number = 0;
-
-    for (int j = rlc_lenght - 1; j >= 0; j--) {
-        if (get_bits(&s->gb, 1) == 1) {
-            rlc_number = set_bit(rlc_number, j);
-        }
-    }
-
-    return rlc_number;
-}
-
-
-static void add_hop0(LheProcessing *proc, uint8_t *symbols, int *pix, int count) {
+static inline void add_hop0(LheProcessing *proc, uint8_t *symbols, int *pix, int count) {
 
     for (int i = 0; i < count; i++) {
         symbols[*pix] = HOP_0;
         *pix= (*pix +1);
     }
 }
-
 
 static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, uint8_t *symbols, int block_y_ini, int block_y_fin, int horizontal_blocks, int lhe_mode, int channel) {
 
@@ -585,10 +567,14 @@ static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, u
     uint8_t hopl[9]={ 4,5,3,6,2,7,1,8,0 };
 
     uint8_t *hops = av_calloc(proc->width*proc->height, sizeof(uint8_t));
+    struct timeval before , after, before_huffman, after_huffman;
 
     if (channel == 0) {num_hops = proc->num_hopsY;}
     else if (channel == 1) {num_hops = proc->num_hopsU;}
     else if (channel == 2) {num_hops = proc->num_hopsV;}
+
+    gettimeofday(&before , NULL);
+    double time_huffman = 0;
 
     while (true){
         //av_log(NULL, AV_LOG_INFO, "hops_counter: %d\n", hops_counter);
@@ -611,7 +597,7 @@ static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, u
             break;
             case RLC1:
                 if (data == 0) {
-                    rlc_number = get_rlc_number(s, rlc_length);
+                    rlc_number = get_bits(&s->gb, rlc_length);
                     add_hop0(proc, hops, &hops_counter, rlc_number);
                     h0_counter = 0;
                     mode = HUFFMAN;
@@ -625,7 +611,7 @@ static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, u
             break;
             case RLC2:
                 if (data == 0) {
-                    rlc_number = get_rlc_number(s, rlc_length);
+                    rlc_number = get_bits(&s->gb, rlc_length);
                     add_hop0(proc, hops, &hops_counter, rlc_number);
                     rlc_length = 4;
                     h0_counter = 0;
@@ -638,8 +624,14 @@ static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, u
         }
     }
 
+    gettimeofday(&after , NULL);
+    timecount = time_diff(before , after);
+    av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los bits: %d\n", timecount);
+
     int a = 0;
     bool empty = 0;
+
+    gettimeofday(&before , NULL);
 
     for (int block_y = block_y_ini; block_y < block_y_fin; block_y++) {
         for (int i = 0; i < horizontal_blocks; i++) {
@@ -665,7 +657,7 @@ static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, u
                 dif_pix = 0;
             }
 
-            if (empty == 1){
+            /*if (empty == 1){
                 for (int y = yini; y < yfin_downsampled; y++) {
                     for (int x = xini; x < xfin_downsampled; x++) {
                         symbols[pix] = 4;
@@ -673,7 +665,7 @@ static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, u
                     }
                     pix+=dif_pix;
                 }
-            } else {
+            } else {*/
                 for (int y = yini; y < yfin_downsampled; y++) {
                     for (int x = xini; x < xfin_downsampled; x++) {
                         symbols[pix] = hops[a];
@@ -682,7 +674,7 @@ static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, u
                     }
                     pix+=dif_pix;
                 }
-            }
+            //}
             block_x += inc_x;
         }
         block_x=0;
@@ -690,10 +682,224 @@ static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, u
         //inc_x = -inc_x;
     }
 
+    gettimeofday(&after , NULL);
+    timecount = time_diff(before , after);
+    av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los hops: %d\n", timecount);
+
     av_free(hops);
 }
 
 
+static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, uint8_t *symbols, int block_y_ini, int block_y_fin, int horizontal_blocks, int lhe_mode, int channel) {
+
+    int xini, yini, xfin_downsampled, yfin_downsampled, pix, dif_pix;
+
+    int mode = HUFFMAN, h0_counter = 0, hops_counter = 0, zero_counter = 0, hop = 15, rlc_number = 0, ahorro = 0;
+    int condition_length = 7;
+    int rlc_length = 4;
+    int last_mode = HUFFMAN;
+    uint32_t num_hops;
+    unsigned int data = 3;
+
+    int block_x = block_y_ini*horizontal_blocks;
+    int inc_x = 1;
+
+    const uint8_t hopl[9]={ 4,5,3,6,2,7,1,8,0 };
+
+    const uint8_t lengths[9]={ 8,7,5,3,1,2,4,6,8 };
+ 
+    uint8_t *hops = av_calloc(proc->width*proc->height, sizeof(uint8_t));
+
+    struct timeval before , after, before_huffman, after_huffman;
+
+    const uint8_t gethop[127] = {[0 ... 126] = 5};
+    const int gethop_short[256] = {5};
+/*
+    for (int i = 0; i < 256; i++){
+        gethop[i] = 5;
+        gethop_short[i] = 5;
+    }
+*/
+    if (channel == 0) {num_hops = proc->num_hopsY;}
+    else if (channel == 1) {num_hops = proc->num_hopsU;}
+    else if (channel == 2) {num_hops = proc->num_hopsV;}
+
+    gettimeofday(&before , NULL);
+    double time_huffman = 0;
+
+    while (true){
+        //av_log(NULL, AV_LOG_INFO, "hops_counter: %d\n", hops_counter);
+        if (hops_counter == num_hops) break;
+        data = show_bits(&s->gb, 8);
+        switch (mode){
+            case HUFFMAN:
+                if (ahorro == 0) {
+                    if (data >= 128) {
+                        hop = HOP_0;
+                        skip_bits(&s->gb, 1);
+                    } else if (data >= 64) {
+                        hop = HOP_POS_1;
+                        skip_bits(&s->gb, 2);
+                    } else if (data >= 32) {
+                        hop = HOP_NEG_1;
+                        skip_bits(&s->gb, 3);
+                    } else if (data > 3) {
+                        if (data >= 16) {
+                            hop = HOP_POS_2;
+                            skip_bits(&s->gb, 4);
+                        } else if (data >= 8) {
+                            hop = HOP_NEG_2;
+                            skip_bits(&s->gb, 5);
+                        } else {
+                            hop = HOP_POS_3;
+                            skip_bits(&s->gb, 6);
+                        }
+                    } else {
+                        if (data >= 2) {
+                            hop = HOP_NEG_3;
+                            skip_bits(&s->gb, 7);
+                        } else if (data >= 1) {
+                            hop = HOP_POS_4;
+                            skip_bits(&s->gb, 8);
+                        } else {
+                            hop = HOP_NEG_4;
+                            skip_bits(&s->gb, 8);
+                        }
+                    }
+                } else {
+                    if (data >= 128) {
+                        hop = HOP_POS_1;
+                        skip_bits(&s->gb, 1);
+                    } else if (data >= 64) {
+                        hop = HOP_NEG_1;
+                        skip_bits(&s->gb, 2);
+                    } else if (data >= 32) {
+                        hop = HOP_POS_2;
+                        skip_bits(&s->gb, 3);
+                    } else if (data > 3) {
+                        if (data >= 16) {
+                            hop = HOP_NEG_2;
+                            skip_bits(&s->gb, 4);
+                        } else if (data >= 8) {
+                            hop = HOP_POS_3;
+                            skip_bits(&s->gb, 5);
+                        } else {
+                            hop = HOP_NEG_3;
+                            skip_bits(&s->gb, 6);
+                        }
+                    } else {
+                        if (data >= 2) {
+                            hop = HOP_POS_4;
+                            skip_bits(&s->gb, 7);
+                        } else {
+                            hop = HOP_NEG_4;
+                            skip_bits(&s->gb, 7);
+                        }
+                    }
+                } 
+
+                ahorro=0;
+                if (hop == HOP_0) h0_counter++;
+                else h0_counter = 0;
+                if (h0_counter == condition_length) mode = RLC1;
+                hops[hops_counter] = hop;
+                hops_counter++;
+            break;
+            case RLC1:
+                data = get_bits(&s->gb, 1);
+                if (data == 0) {
+                    rlc_number = get_bits(&s->gb, rlc_length);
+                    add_hop0(proc, hops, &hops_counter, rlc_number);
+                    h0_counter = 0;
+                    mode = HUFFMAN;
+                    ahorro=1;
+
+                } else {
+                    add_hop0(proc, hops, &hops_counter, 15);
+                    rlc_length += 1;
+                    mode = RLC2;
+                }
+            break;
+            case RLC2:
+                data = get_bits(&s->gb, 1);
+                if (data == 0) {
+                    rlc_number = get_bits(&s->gb, rlc_length);
+                    add_hop0(proc, hops, &hops_counter, rlc_number);
+                    rlc_length = 4;
+                    h0_counter = 0;
+                    mode = HUFFMAN;
+                    ahorro=1;
+                } else {
+                    add_hop0(proc, hops, &hops_counter, 31);
+                }
+            break;
+        }
+    }
+
+    gettimeofday(&after , NULL);
+    timecount = time_diff(before , after);
+    av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los bits: %d\n", timecount);
+
+    int a = 0;
+    bool empty = 0;
+
+    gettimeofday(&before , NULL);
+
+    for (int block_y = block_y_ini; block_y < block_y_fin; block_y++) {
+        for (int i = 0; i < horizontal_blocks; i++) {
+/*
+            if (channel == 0) empty = (&s->procY)->advanced_block[block_y][block_x].empty_flagY;
+            else if (channel == 1) empty = (&s->procY)->advanced_block[block_y][block_x].empty_flagU;
+            else if (channel == 2) empty = (&s->procY)->advanced_block[block_y][block_x].empty_flagV;
+*/
+            xini = proc->basic_block[block_y][block_x].x_ini;
+            yini = proc->basic_block[block_y][block_x].y_ini;
+            
+            if (lhe_mode != BASIC_LHE) {
+                xfin_downsampled = proc->advanced_block[block_y][block_x].x_fin_downsampled;          
+                yfin_downsampled = proc->advanced_block[block_y][block_x].y_fin_downsampled;
+
+                pix = yini*proc->width+xini;
+                dif_pix = proc->width-xfin_downsampled+xini;
+            } else {
+                xfin_downsampled = proc->width;          
+                yfin_downsampled = proc->height;
+
+                pix = 0;
+                dif_pix = 0;
+            }
+
+            /*if (empty == 1){
+                for (int y = yini; y < yfin_downsampled; y++) {
+                    for (int x = xini; x < xfin_downsampled; x++) {
+                        symbols[pix] = 4;
+                        pix++;
+                    }
+                    pix+=dif_pix;
+                }
+            } else {*/
+                for (int y = yini; y < yfin_downsampled; y++) {
+                    for (int x = xini; x < xfin_downsampled; x++) {
+                        symbols[pix] = hops[a];
+                        a++;
+                        pix++;
+                    }
+                    pix+=dif_pix;
+                }
+            //}
+            block_x += inc_x;
+        }
+        block_x=0;
+        //block_x -= inc_x;
+        //inc_x = -inc_x;
+    }
+
+    gettimeofday(&after , NULL);
+    timecount = time_diff(before , after);
+    av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los hops: %d\n", timecount);
+
+    av_free(hops);
+}
 
 
 
@@ -720,9 +926,9 @@ static void lhe_advanced_read_all_file_symbols (LheState *s, LheHuffEntry *he_Y,
     lheU = &s->lheU;
     lheV = &s->lheV;
     
-    lhe_advanced_read_file_symbols2 (s, procY, lheY->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 0);   
-    lhe_advanced_read_file_symbols2 (s, procUV, lheU->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 1);            
-    lhe_advanced_read_file_symbols2 (s, procUV, lheV->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 2);
+    lhe_advanced_read_file_symbols3 (s, procY, lheY->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 0);   
+    lhe_advanced_read_file_symbols3 (s, procUV, lheU->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 1);            
+    lhe_advanced_read_file_symbols3 (s, procUV, lheV->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 2);
 
 /*
     for (int block_y=0; block_y<s->total_blocks_height; block_y++)
@@ -849,17 +1055,71 @@ static void lhe_advanced_read_mesh (LheState *s, LheHuffEntry *he_mesh, float pp
                                              block_x, block_y);
 
             lhe_advanced_perceptual_relevance_to_ppp(procY, procUV, compression_factor, ppp_max_theoric, block_x, block_y);
-            
+        }
+    }
+
+    for (int block_y=0; block_y<s->total_blocks_height; block_y++)
+    {
+        for (int block_x=0; block_x<s->total_blocks_width; block_x++)
+        {
+/*            
+            //Ajuste de adyacencias junio 2018
+            if (block_x < s->total_blocks_width-1 && block_y < s->total_blocks_height-1){
+                (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = (&s->procY)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER];
+                (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = (&s->procY)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER];
+                (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = (&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER];
+                (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = (&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER];
+
+                (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] = (&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER];
+                (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = (&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER];
+                (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] = (&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER];
+                (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = (&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER];
+
+                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = (&s->procUV)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER];
+                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = (&s->procUV)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER];
+                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = (&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER];
+                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = (&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER];
+                
+                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] = (&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER];
+                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = (&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER];
+                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] = (&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER];
+                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = (&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER];
+            }
+*/
             //Adjusts luminance ppp to rectangle shape 
             //lhe_advanced_ppp_side_to_rectangle_shape (procY, ppp_max_theoric, block_x, block_y);  
             //if (!(&s->procY)->advanced_block[block_y][block_x].empty_flagY) {
-                procY->num_hopsY += lhe_advanced_ppp_side_to_rectangle_shape (procY, ppp_max_theoric, block_x, block_y);  
+            procY->num_hopsY += lhe_advanced_ppp_side_to_rectangle_shape (procY, ppp_max_theoric, block_x, block_y);  
             //} else {
                 //lhe_advanced_ppp_side_to_rectangle_shape (procY, ppp_max_theoric, block_x, block_y);
             //}
             //Adjusts chrominance ppp to rectangle shape
             procUV->num_hopsU += lhe_advanced_ppp_side_to_rectangle_shape (procUV, ppp_max_theoric, block_x, block_y);
             procUV->num_hopsV = procUV->num_hopsU;
+
+            //Ajuste de adyacencias junio 2018
+            if (block_x < s->total_blocks_width-1 && block_y < s->total_blocks_height-1){
+                (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])/2;
+                (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])/2;
+                (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])/2;
+                (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
+
+                (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] = ( (&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] )/2;
+                (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] =  ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2;
+                (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] = ( (&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] )/2;
+                (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] =  ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
+
+                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])/2;
+                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])/2;
+                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])/2;
+                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
+                
+                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] )/2;
+                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2;
+                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] )/2;
+                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
+            }
+
             /*if (!(&s->procY)->advanced_block[block_y][block_x].empty_flagU) { 
                 procUV->num_hopsU += num_hopsUV;
             }
@@ -2055,57 +2315,64 @@ static void lhe_advanced_decode_symbols(LheState *s, LheHuffEntry *he_Y, LheHuff
     s->procUV.perceptual_relevance_y = s->procY.perceptual_relevance_y;
     s->procUV.perceptual_relevance_x = s->procY.perceptual_relevance_x;
     //#pragma omp parallel for
-    for (int block_y = 0; block_y < s->total_blocks_height; block_y++)
-    {
-        for (int block_x = 0; block_x < s->total_blocks_width; block_x++)
+    for (int i = -(int)s->total_blocks_height+1; i < (int)s->total_blocks_width; i++){
+        #pragma omp parallel for
+        for (int block_y=s->total_blocks_height-1; block_y>=0; block_y--) 
         {
-            //Luminance
-            lhe_advanced_decode_one_hop_per_pixel_block(&s->prec, &s->procY, &s->lheY, s->total_blocks_width, block_x, block_y);
-            //Chrominance U
-            lhe_advanced_decode_one_hop_per_pixel_block(&s->prec, &s->procUV, &s->lheU, s->total_blocks_width, block_x, block_y);
-            //Chrominance V
-            lhe_advanced_decode_one_hop_per_pixel_block(&s->prec, &s->procUV, &s->lheV, s->total_blocks_width, block_x, block_y);
+            int block_x = i + s->total_blocks_height -1 - block_y;
+            if (block_x >= 0 && block_x < s->total_blocks_width) {
+                //Luminance
+                lhe_advanced_decode_one_hop_per_pixel_block(&s->prec, &s->procY, &s->lheY, s->total_blocks_width, block_x, block_y);
+                //Chrominance U
+                lhe_advanced_decode_one_hop_per_pixel_block(&s->prec, &s->procUV, &s->lheU, s->total_blocks_width, block_x, block_y);
+                //Chrominance V
+                lhe_advanced_decode_one_hop_per_pixel_block(&s->prec, &s->procUV, &s->lheV, s->total_blocks_width, block_x, block_y);
+            }
         }
+
     }
-    //#pragma omp parallel for
-    for (int block_y = 0; block_y < s->total_blocks_height; block_y++)
-    {
-        for (int block_x = 0; block_x < s->total_blocks_width; block_x++)
+
+    for (int i = -(int)s->total_blocks_height+1; i < (int)s->total_blocks_width; i++){
+        #pragma omp parallel for
+        for (int block_y=s->total_blocks_height-1; block_y>=0; block_y--) 
         {
-            //Luminance
+            int block_x = i + s->total_blocks_height -1 - block_y;
+            if (block_x >= 0 && block_x < s->total_blocks_width) {
+                //Luminance
 
-            lhe_advanced_vertical_adaptative_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
-                                                                  block_x, block_y, s->total_blocks_height, false);
-            //Chrominance U
-            lhe_advanced_vertical_adaptative_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
-                                                                  block_x, block_y, s->total_blocks_height,true);
-            //Chrominance V
-            lhe_advanced_vertical_adaptative_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
-                                                                  block_x, block_y, s->total_blocks_height,true);
-
-        }
-    }
-    //#pragma omp parallel for
-    for (int block_y = 0; block_y < s->total_blocks_height; block_y++)
-    {
-        for (int block_x = 0; block_x < s->total_blocks_width; block_x++)
-        {
-            //Luminance
-
-            lhe_advanced_horizontal_adaptative_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
-                                                                    s->frame->linesize[0], block_x, block_y,false);
-            //Chrominance U
-            lhe_advanced_horizontal_adaptative_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
-                                                                    s->frame->linesize[1], block_x, block_y,true);
-            //Chrominance V
-            lhe_advanced_horizontal_adaptative_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
-                                                                    s->frame->linesize[2], block_x, block_y,true);
-
+                lhe_advanced_vertical_adaptative_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
+                                                                      block_x, block_y, s->total_blocks_height, false);
+                //Chrominance U
+                lhe_advanced_vertical_adaptative_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
+                                                                      block_x, block_y, s->total_blocks_height,true);
+                //Chrominance V
+                lhe_advanced_vertical_adaptative_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
+                                                                      block_x, block_y, s->total_blocks_height,true);
+            }
         }
     }
 
-    /*
-    for (int block_y=0; block_y<s->total_blocks_height; block_y++)
+    for (int i = -(int)s->total_blocks_height+1; i < (int)s->total_blocks_width; i++){
+        #pragma omp parallel for
+        for (int block_y=s->total_blocks_height-1; block_y>=0; block_y--) 
+        {
+            int block_x = i + s->total_blocks_height -1 - block_y;
+            if (block_x >= 0 && block_x < s->total_blocks_width) {
+                //Luminance
+
+                lhe_advanced_horizontal_adaptative_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
+                                                                        s->frame->linesize[0], block_x, block_y,false);
+                //Chrominance U
+                lhe_advanced_horizontal_adaptative_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
+                                                                        s->frame->linesize[1], block_x, block_y,true);
+                //Chrominance V
+                lhe_advanced_horizontal_adaptative_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
+                                                                        s->frame->linesize[2], block_x, block_y,true);
+            }
+        }
+    }
+    
+    /*for (int block_y=0; block_y<s->total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<s->total_blocks_width; block_x++)
         {  
@@ -2113,8 +2380,8 @@ static void lhe_advanced_decode_symbols(LheState *s, LheHuffEntry *he_Y, LheHuff
             lhe_advanced_filter_epxp (s, block_x, block_y);
 
         }
-    }*/
-
+    }
+*/
     //lhe_advanced_filter (&s->procY, &s->lheY, s->frame->linesize[0]);
     //lhe_advanced_filter (&s->procUV, &s->lheU, s->frame->linesize[1]);
     //lhe_advanced_filter (&s->procUV, &s->lheV, s->frame->linesize[2]);
@@ -2514,9 +2781,9 @@ static int lhe_decode_frame(AVCodecContext *avctx, void *data, int *got_frame, A
         (&s->procY)->num_hopsY = image_size_Y;
         (&s->procUV)->num_hopsU = image_size_UV;
         (&s->procUV)->num_hopsV = image_size_UV;
-        lhe_advanced_read_file_symbols2 (s, &s->procY, (&s->lheY)->hops, 0, s->total_blocks_height, 1, BASIC_LHE, 0);
-        lhe_advanced_read_file_symbols2 (s, &s->procUV, (&s->lheU)->hops, 0, s->total_blocks_height, 1, BASIC_LHE, 1);            
-        lhe_advanced_read_file_symbols2 (s, &s->procUV, (&s->lheV)->hops, 0, s->total_blocks_height, 1, BASIC_LHE, 2);
+        lhe_advanced_read_file_symbols3 (s, &s->procY, (&s->lheY)->hops, 0, s->total_blocks_height, 1, BASIC_LHE, 0);
+        lhe_advanced_read_file_symbols3 (s, &s->procUV, (&s->lheU)->hops, 0, s->total_blocks_height, 1, BASIC_LHE, 1);            
+        lhe_advanced_read_file_symbols3 (s, &s->procUV, (&s->lheV)->hops, 0, s->total_blocks_height, 1, BASIC_LHE, 2);
         
         lhe_basic_decode_frame_sequential (s);    
     
@@ -2529,6 +2796,7 @@ static int lhe_decode_frame(AVCodecContext *avctx, void *data, int *got_frame, A
 
     return avpkt->size;//Hay que devolver el numero de bytes leidos (puede ser la solución a la doble ejecución del decoder).
 }
+
 
 //==================================================================
 // DECODE VIDEO FRAME
@@ -2548,6 +2816,10 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
     
     float compression_factor;
     uint32_t ppp_max_theoric;
+
+    struct timeval before , after;
+
+    gettimeofday(&before , NULL);
     
     LheHuffEntry he_mesh[LHE_MAX_HUFF_SIZE_MESH];
     LheHuffEntry he_Y[LHE_MAX_HUFF_SIZE_SYMBOLS];
@@ -2704,14 +2976,14 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
         }*/
 
         lhe_advanced_read_mesh(s, he_mesh, ppp_max_theoric, compression_factor);
-        
+
         lhe_advanced_read_all_file_symbols (s, he_Y, he_UV);
                 
         lhe_advanced_decode_symbols (s, he_Y, he_UV, image_size_Y, image_size_UV);
     }   
     
 
-
+    
 
 
 
@@ -2731,7 +3003,11 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
     
     if ((ret = av_frame_ref(data, s->frame)) < 0) 
         return ret;
- 
+
+    gettimeofday(&after , NULL);
+    timecount = time_diff(before , after);
+    av_log(NULL, AV_LOG_INFO, "Tiempo en procesar el paquete: %d\n", timecount);
+
     *got_frame = 1;
 
     return 0;
