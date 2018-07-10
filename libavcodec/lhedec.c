@@ -845,6 +845,7 @@ static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, u
 
     gettimeofday(&before , NULL);
 
+
     for (int block_y = block_y_ini; block_y < block_y_fin; block_y++) {
         for (int i = 0; i < horizontal_blocks; i++) {
 /*
@@ -896,7 +897,7 @@ static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, u
 
     gettimeofday(&after , NULL);
     timecount = time_diff(before , after);
-    av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los hops: %d\n", timecount);
+    av_log(NULL, AV_LOG_WARNING, "Tiempo en procesar los hops: %d\n", timecount);
 
     av_free(hops);
 }
