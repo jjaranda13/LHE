@@ -626,7 +626,7 @@ static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, u
 
     gettimeofday(&after , NULL);
     timecount = time_diff(before , after);
-    av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los bits: %d\n", timecount);
+    //av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los bits: %d\n", timecount);
 
     int a = 0;
     bool empty = 0;
@@ -684,7 +684,7 @@ static void lhe_advanced_read_file_symbols2 (LheState *s, LheProcessing *proc, u
 
     gettimeofday(&after , NULL);
     timecount = time_diff(before , after);
-    av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los hops: %d\n", timecount);
+    //av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los hops: %d\n", timecount);
 
     av_free(hops);
 }
@@ -838,7 +838,7 @@ static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, u
 
     gettimeofday(&after , NULL);
     timecount = time_diff(before , after);
-    av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los bits: %d\n", timecount);
+    //av_log(NULL, AV_LOG_PANIC, "Tiempo en procesar los bits: %d\n", timecount);
 
     int a = 0;
     bool empty = 0;
@@ -897,7 +897,7 @@ static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, u
 
     gettimeofday(&after , NULL);
     timecount = time_diff(before , after);
-    av_log(NULL, AV_LOG_WARNING, "Tiempo en procesar los hops: %d\n", timecount);
+    //av_log(NULL, AV_LOG_WARNING, "Tiempo en procesar los hops: %d\n", timecount);
 
     av_free(hops);
 }
@@ -3007,7 +3007,7 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
 
     gettimeofday(&after , NULL);
     timecount = time_diff(before , after);
-    av_log(NULL, AV_LOG_INFO, "Tiempo en procesar el paquete: %d\n", timecount);
+    //av_log(NULL, AV_LOG_INFO, "Tiempo en procesar el paquete: %d\n", timecount);
 
     *got_frame = 1;
 

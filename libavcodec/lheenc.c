@@ -3834,7 +3834,7 @@ static int mlhe_encode_video(AVCodecContext *avctx, AVPacket *pkt,
 
     LheContext *s = avctx->priv_data;
         
-    gettimeofday(&before , NULL);
+    //gettimeofday(&before , NULL);
 
     if (s->skip_frames > 0) {
         s->frame_count++;
@@ -3965,8 +3965,8 @@ static int mlhe_encode_video(AVCodecContext *avctx, AVPacket *pkt,
 
     pkt->flags |= AV_PKT_FLAG_KEY;
     *got_packet = 1;
-    gettimeofday(&after , NULL);
-    microsec += time_diff(before , after);
+    //gettimeofday(&after , NULL);
+    //microsec += time_diff(before , after);
 
     return 0;
 
