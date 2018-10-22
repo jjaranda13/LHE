@@ -79,8 +79,8 @@ static void lhe_init_pixel_format (AVCodecContext *avctx, LheState *s)
     } else
     {
         avctx->pix_fmt = AV_PIX_FMT_YUV420P;
-        avctx->width = 512;//512;
-        avctx->height = 512;//384;
+        avctx->width = 100;//512;
+        avctx->height = 100;//384;
         av_log(NULL, AV_LOG_INFO, "Pix fmt 420 con el else\n");
         s->chroma_factor_width = 2;
         s->chroma_factor_height = 2;

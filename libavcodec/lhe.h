@@ -222,6 +222,8 @@ typedef struct AdvancedLheBlock {
     uint32_t downsampled_y_side;
     float ppp_x[CORNERS];
     float ppp_y[CORNERS];
+    uint8_t enc_type; //I = 0/ P = 1
+    int block_ttl; //After certain number of frames in which this block is P, force I block
     //uint64_t hop_counter[9];
     //bool empty_flagY;
     //bool empty_flagU;
@@ -230,12 +232,20 @@ typedef struct AdvancedLheBlock {
 
 typedef struct LheProcessing {
     BasicLheBlock **basic_block;
-    AdvancedLheBlock **advanced_block;
-    AdvancedLheBlock **last_advanced_block;
-    AdvancedLheBlock **buffer_advanced_block;
-    AdvancedLheBlock **buffer1_advanced_block;
-    float **perceptual_relevance_x;
-    float **perceptual_relevance_y;
+    AdvancedLheBlock **advanced_block; //Only pointer
+    AdvancedLheBlock **last_advanced_block; //Only pointer
+    AdvancedLheBlock **buffer_advanced_block; //Allocated memory for blocks
+    AdvancedLheBlock **buffer1_advanced_block; //Allocated memory for blocks
+    float **perceptual_relevance_x; //Only pointer
+    float **perceptual_relevance_y; //Only pointer
+    float **last_perceptual_relevance_x; //Only pointer
+    float **last_perceptual_relevance_y; //Only pointer
+    float **buffer_perceptual_relevance_x; //Allocated memory for PR
+    float **buffer_perceptual_relevance_y; //Allocated memory for PR
+    float **buffer1_perceptual_relevance_x; //Allocated memory for PR
+    float **buffer1_perceptual_relevance_y; //Allocated memory for PR
+    float **prx_movement; //Array of differences of PRx
+    float **pry_movement; //Array of differences of PRy
     uint32_t width;
     uint32_t height;
     uint8_t pr_factor;
