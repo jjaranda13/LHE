@@ -246,8 +246,8 @@ typedef struct LheProcessing {
     float **buffer1_perceptual_relevance_y; //Allocated memory for PR
     float **prx_movement; //Array of differences of PRx
     float **pry_movement; //Array of differences of PRy
-    uint32_t width;
-    uint32_t height;
+    uint16_t width;
+    uint16_t height;
     uint8_t pr_factor;
     uint32_t theoretical_block_width;
     uint32_t theoretical_block_height;
