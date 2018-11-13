@@ -41,6 +41,7 @@ typedef struct LheContext {
     bool pr_metrics;
     bool basic_lhe;
     int ql;
+    int down_mode_reconf;
     int down_mode;
     int num_rectangle;
     int active;
@@ -54,13 +55,12 @@ typedef struct LheContext {
     Prot_Rectangle protected_rectangles[MAX_RECTANGLES];
     int rectangles_TTL;
     char *rectangle_list;
-    uint8_t down_mode_p;
-    int down_mode_reconf;
+    //uint8_t down_mode_p;
     bool color;
     bool pr_metrics_active;
     int ql_reconf;
     int skip_frames_reconf;
-    int down_mode_p_reconf;
+    //int down_mode_p_reconf;
     bool color_reconf;
     bool pr_metrics_active_reconf;
     uint8_t gop_reconf;
@@ -549,7 +549,7 @@ static av_cold int lhe_encode_init(AVCodecContext *avctx)
 
     s->down_mode_reconf = -1;
     s->color_reconf = true;
-    s->down_mode_p_reconf = -1;
+    //s->down_mode_p_reconf = -1;
     s->pr_metrics_active_reconf = 0;
     s->skip_frames = 0;
 
@@ -637,10 +637,10 @@ static void mlhe_reconfig (AVCodecContext *avctx, LheContext *s)
 
     if (s->ql_reconf != -1 && s->ql != s->ql_reconf)
         s->ql = s->ql_reconf;
-    if (s->down_mode_reconf != -1 && s->down_mode != s->down_mode_reconf)
-        s->down_mode = s->down_mode_reconf;
-    if (s->down_mode_p_reconf != -1 && s->down_mode_p != s->down_mode_p_reconf)
-        s->down_mode_p = s->down_mode_p_reconf;
+    //if (s->down_mode_reconf != -1 && s->down_mode != s->down_mode_reconf)
+    //    s->down_mode = s->down_mode_reconf;
+    //if (s->down_mode_p_reconf != -1 && s->down_mode_p != s->down_mode_p_reconf)
+    //    s->down_mode_p = s->down_mode_p_reconf;
 
     if (s->color != s->color_reconf)
         s->color = s->color_reconf;
@@ -2002,6 +2002,8 @@ static void lhe_advanced_compute_pr_lum (LheBasicPrec *prec, LheProcessing *proc
             else lum_dif = 4;
             if (lum_dif==0) {
                 pix++;
+                last_lum_dif = lum_dif;
+                last_lum_sign = lum_sign;
                 continue;
             }
 
@@ -2049,6 +2051,8 @@ static void lhe_advanced_compute_pr_lum (LheBasicPrec *prec, LheProcessing *proc
             else lum_dif = 4;
             if (lum_dif==0) {
                 pix += linesize;
+                last_lum_dif = lum_dif;
+                last_lum_sign=lum_sign;
                 continue;
             }
 
@@ -2316,9 +2320,9 @@ static void lhe_advanced_horizontal_downsample_average (LheProcessing *proc, uin
                                                         int linesize, int block_x, int block_y) 
 {
     uint32_t block_height, downsampled_x_side, xini, xdown_prev, xdown_fin, xfin_downsampled, yini, yfin;
-    float xdown_prev_float, xdown_fin_float;
-    float gradient, gradient_0, gradient_1, ppp_x, ppp_0, ppp_1, ppp_2, ppp_3;
-    float component_float, percent;
+    double xdown_prev_float, xdown_fin_float;
+    double gradient, gradient_0, gradient_1, ppp_x, ppp_0, ppp_1, ppp_2, ppp_3;
+    double component_float, percent;
     uint8_t component;
     
     block_height = proc->basic_block[block_y][block_x].block_height;
@@ -2384,6 +2388,7 @@ static void lhe_advanced_horizontal_downsample_average (LheProcessing *proc, uin
             xdown_prev = xdown_fin;
             xdown_prev_float = xdown_fin_float;
             xdown_fin_float+=ppp_x;
+            
         }//x
 
         ppp_0+=gradient_0;
@@ -2405,10 +2410,10 @@ static void lhe_advanced_horizontal_downsample_average (LheProcessing *proc, uin
 static void lhe_advanced_vertical_downsample_average (LheProcessing *proc, LheImage *lhe, uint8_t *intermediate_downsample_image, int block_x, int block_y) 
 {
     
-    float ppp_y, ppp_0, ppp_1, ppp_2, ppp_3, gradient, gradient_0, gradient_1;
+    double ppp_y, ppp_0, ppp_1, ppp_2, ppp_3, gradient, gradient_0, gradient_1;
     uint32_t downsampled_y_side, xini, xfin_downsampled, yini, ydown_prev, ydown_fin, yfin_downsampled, downsampled_x_side;
-    float ydown_prev_float, ydown_fin_float;
-    float component_float, percent;
+    double ydown_prev_float, ydown_fin_float;
+    double component_float, percent;
     uint8_t component;
   
     downsampled_y_side = proc->advanced_block[block_y][block_x].downsampled_y_side;
@@ -2468,11 +2473,11 @@ static void lhe_advanced_vertical_downsample_average (LheProcessing *proc, LheIm
             
             lhe->downsampled_image[y*proc->width+x] = component;
             
-            ydown_fin_float+=ppp_y/2;                       
+            //ydown_fin_float+=ppp_y/2;                       
             ppp_y+=gradient;
             ydown_prev = ydown_fin;
             ydown_prev_float = ydown_fin_float;
-            ydown_fin_float+=ppp_y/2;
+            ydown_fin_float+=ppp_y;
         }//ysc
         ppp_0+=gradient_0;
         ppp_2+=gradient_1;
@@ -2483,11 +2488,11 @@ static void lhe_advanced_vertical_downsample_average (LheProcessing *proc, LheIm
 
 static void lhe_advanced_downsample_sps (LheProcessing *proc, LheImage *lhe, uint8_t *component_original_data, int linesize, int block_x, int block_y) 
 {
-    float pppx_0, pppx_1, pppx_2, pppx_3, pppy_0, pppy_1, pppy_2, pppy_3, pppx, pppy, pppx_a, pppx_b, pppy_a, pppy_b, pppy_c;
-    float grad_a_pppx, grad_a_pppy, grad_b_pppx, grad_b_pppy, grad_pppx, grad_pppy, grad_c_pppy;
+    double pppx_0, pppx_1, pppx_2, pppx_3, pppy_0, pppy_1, pppy_2, pppy_3, pppx, pppy, pppx_a, pppx_b, pppy_a, pppy_b, pppy_c;
+    double grad_a_pppx, grad_a_pppy, grad_b_pppx, grad_b_pppy, grad_pppx, grad_pppy, grad_c_pppy;
 
     uint32_t downsampled_x_side, downsampled_y_side, xini, xfin_downsampled, yfin_downsampled, yini, y_sc, width;
-    float ya, x_float, y_float, xa;
+    double ya, x_float, y_float, xa;
     int x, y;
     uint8_t *downsampled_image;
 
@@ -2560,19 +2565,21 @@ static void lhe_advanced_downsample_sps (LheProcessing *proc, LheImage *lhe, uin
             x = x_float;
             y_float = yini+pppy_c/2+((pppy+pppy_c)*(y_sc-yini))/2.0;
             y = y_float;
+            //x = xini + pppx_a/2 + ((pppx+pppx_a)*(x_sc-xini))/2;
 
             downsampled_image[y_sc*width+x_sc] = component_original_data[y*linesize+x];
 
-            pppx+=grad_pppx;
             x_float+=pppx/2.0;
+            pppx+=grad_pppx;
             pppy_c+=grad_c_pppy;
             pppy+=grad_pppy;
         }//x
         pppx_a+=grad_a_pppx;
         pppx_b+=grad_b_pppx;
-        pppy_a+=grad_a_pppy;
+        
         pppy_b+=grad_b_pppy;
         ya+=pppy_a/2.0;
+        pppy_a+=grad_a_pppy;
 
     }//y
 
@@ -2625,26 +2632,45 @@ static float lhe_advanced_encode (LheContext *s, const AVFrame *frame,
 
             //Ajuste de adyacencias junio 2018
             if (block_x < total_blocks_width-1 && block_y < total_blocks_height-1){
-                (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])/2;
-                (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])/2;
-                (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])/2;
-                (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
-
-                (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] = ( (&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] )/2;
-                (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] =  ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2;
-                (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] = ( (&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] )/2;
-                (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] =  ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
-
-                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])/2;
-                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])/2;
-                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])/2;
-                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
                 
-                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] )/2;
-                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2;
-                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] )/2;
-                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER] < (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])
+                    (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])/2;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER] < (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])
+                    (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])/2;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER] < (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])
+                    (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])/2;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] < (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])
+                    (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
+
+                if (((s->procY).advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]) < ((s->procY).advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER]))
+                    (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER])/2;
+                if (((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]) < ((&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER]))
+                    (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2.0f;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER] < (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER])
+                    (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER])/2;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] < (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])
+                    (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
+
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
+                
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER] < (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] )/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])
+                    (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER] < (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] )/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])
+                    (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
             }
+
+
 
             switch (s->down_mode)
             {
@@ -2655,7 +2681,7 @@ static float lhe_advanced_encode (LheContext *s, const AVFrame *frame,
                     break;
 
                 case 1:
-                    //LUMINANCE         
+                    //LUMINANCE      
                     lhe_advanced_horizontal_downsample_average (&s->procY, component_original_data_Y, intermediate_downsample_Y,
                                                                 frame->linesize[0], block_x, block_y);
                                                             
@@ -2677,6 +2703,30 @@ static float lhe_advanced_encode (LheContext *s, const AVFrame *frame,
                  
                 case 2:
                     //LUMINANCE
+                    lhe_advanced_horizontal_downsample_sps (&s->procY, component_original_data_Y, intermediate_downsample_Y,
+                                                                frame->linesize[0], block_x, block_y);
+                                              
+                    lhe_advanced_vertical_downsample_sps (&s->procY, &s->lheY, intermediate_downsample_Y,
+                                                            block_x, block_y);
+                    
+                    //CHROMINANCE U
+                    lhe_advanced_horizontal_downsample_sps (&s->procUV,component_original_data_U, intermediate_downsample_U,
+                                                                frame->linesize[1], block_x, block_y);
+                    
+                    lhe_advanced_vertical_downsample_sps (&s->procUV, &s->lheU, intermediate_downsample_U,
+                                                            block_x, block_y);
+                    
+                    //CHROMINANCE_V
+                    lhe_advanced_horizontal_downsample_sps (&s->procUV, component_original_data_V, intermediate_downsample_V,
+                                                                frame->linesize[2], block_x, block_y);
+
+                    lhe_advanced_vertical_downsample_sps (&s->procUV, &s->lheV, intermediate_downsample_V,
+                                                            block_x, block_y);
+
+                    break;        
+
+                case 3:
+                    //LUMINANCE
                     lhe_advanced_horizontal_downsample_average (&s->procY, component_original_data_Y, intermediate_downsample_Y,
                                                                 frame->linesize[0], block_x, block_y);
                                               
@@ -2697,7 +2747,7 @@ static float lhe_advanced_encode (LheContext *s, const AVFrame *frame,
                     lhe_advanced_vertical_downsample_sps (&s->procUV, &s->lheV, intermediate_downsample_V,
                                                             block_x, block_y);
 
-                    break;               
+                    break;            
             }
         }
     }
@@ -2932,6 +2982,9 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     if (ppp_max_theoric > PPP_MAX) ppp_max_theoric = PPP_MAX;
     compression_factor = (&s->prec)->compression_factor[ppp_max_theoric][s->ql];
     
+
+    //Habria que guardar las PR en dos sitios distintos y uno sería el que utilizaría PR to PPP para
+    //no perder la información real del frame cuando estemos en los siguientes.
     lhe_advanced_compute_perceptual_relevance (s, component_original_data_Y, frame->linesize[0],
                                                total_blocks_width,  total_blocks_height);
     
@@ -2942,8 +2995,8 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
         {
-            (&s->procY)->advanced_block[block_y][block_x].block_ttl--;
-            (&s->procUV)->advanced_block[block_y][block_x].block_ttl--;
+            (&s->procY)->advanced_block[block_y][block_x].block_ttl=30;
+            (&s->procUV)->advanced_block[block_y][block_x].block_ttl=30;
             if ((&s->procY)->advanced_block[block_y][block_x].block_ttl <= 0) {
                 (&s->procY)->advanced_block[block_y][block_x].block_ttl = 30;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
                 (&s->procUV)->advanced_block[block_y][block_x].block_ttl = 30;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
@@ -2956,6 +3009,10 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
                 (&s->procUV)->advanced_block[block_y][block_x].block_ttl = 30;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
             } else {
                 //BLOCK P
+
+                //Aqui vamos a programar la mejora de resolución en bloques muy estáticos
+                //Si el movimiento es 0 (get_block_movement = =0) y el TTL es menor que 26 (4 frames quieto) then
+                // PR = 1 en sus cuatro esquinas (8 PR) ojo!! en el array PR_aux
             }
         }
     }
@@ -2965,6 +3022,10 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
         {
+
+            //OJO!!! Hay que tocar la funcion pr to ppp para utilizar el array PR_aux
+            //si optamos por modificar el PPP en lugar del PR tendremos que tocar las cuatro esquinas
+            //del bloque y las PPP de las esquinas de los bloques adyacentes. en total son 12 esquinas.
             lhe_advanced_perceptual_relevance_to_ppp(&s->procY, &s->procUV,
                                                      compression_factor, ppp_max_theoric, 
                                                      block_x, block_y);
@@ -2999,9 +3060,9 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
                 (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
                 
                 (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] )/2;
-                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2;
+                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2;
                 (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] )/2;
-                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
+                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
             }
         }
     }
@@ -3298,6 +3359,7 @@ static const AVOption options[] = {
     { "basic_lhe", "Basic LHE", OFFSET(basic_lhe), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     { "ql", "Quality level from 0 to 99", OFFSET(ql_reconf), AV_OPT_TYPE_INT, { .i64 = 25 }, 0, 99, VE },
     { "block_gop", "GOP size from 0 to 32000", OFFSET(gop_reconf), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 32000, VE },
+    { "down_mode", "0 -> SPS, 1 -> AVG, 2 -> AVGY+SPSX", OFFSET(down_mode), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 3, VE },
     { "num_rectangle", "Number of rectangle to modify", OFFSET(num_rectangle), AV_OPT_TYPE_INT, { .i64 = 4 }, 0, 4, VE },
     { "active", "Avtivate the rectangle", OFFSET(active), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 1, VE },
     { "protection", "Activate protection of the rectangle", OFFSET(protection), AV_OPT_TYPE_INT, { .i64 = 1 }, 0, 1, VE },
@@ -3305,7 +3367,6 @@ static const AVOption options[] = {
     { "xfin", "X coordinate for bottom right corner", OFFSET(xfin), AV_OPT_TYPE_INT, { .i64 = 0 }, -100, 30000, VE },
     { "yini", "Y coordinate for top left corner", OFFSET(yini), AV_OPT_TYPE_INT, { .i64 = 0 }, -100, 30000, VE },
     { "yfin", "Y coordinate for bottom right corner", OFFSET(yfin), AV_OPT_TYPE_INT, { .i64 = 0 }, -100, 30000, VE },
-    { "down_mode", "0 -> SPS, 1 -> AVG, 2 -> AVGY+SPSX", OFFSET(down_mode_reconf), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 2, VE },
     { "skip_frames", "Parameter to skip frames to encode", OFFSET(skip_frames_reconf), AV_OPT_TYPE_INT, { .i64 = 0 }, 0, 100, VE },
     { NULL },
 };
