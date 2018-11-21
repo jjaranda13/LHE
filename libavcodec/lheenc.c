@@ -955,43 +955,6 @@ static void lhe_advanced_horizontal_downsample_sps (LheProcessing *proc, uint8_t
 //==================================================================
 // BASIC LHE FILE
 //==================================================================
-static void pr_to_movement(LheProcessing *proc)
-{
-
-    int total_blocks_width, total_blocks_height, pixels_block, i, j;
-
-    total_blocks_width = HORIZONTAL_BLOCKS;
-    pixels_block = proc->width / HORIZONTAL_BLOCKS;
-    total_blocks_height = proc->height / pixels_block;
-
-    for (i = 0; i < total_blocks_width + 1; i++){
-        for (j = 0; j < total_blocks_height + 1; j++){
-            proc->prx_movement[j][i] = proc->perceptual_relevance_x[j][i] - proc->last_perceptual_relevance_x[j][i];
-            proc->pry_movement[j][i] = proc->perceptual_relevance_y[j][i] - proc->last_perceptual_relevance_y[j][i];
-            if (proc->prx_movement[j][i] < 0) proc->prx_movement[j][i] = -proc->prx_movement[j][i];
-            if (proc->pry_movement[j][i] < 0) proc->pry_movement[j][i] = -proc->pry_movement[j][i];
-        }
-    }
-
-}
-
-static float get_block_movement(LheProcessing *proc, int block_x, int block_y)
-{
-    
-    float accum_y, accum_x, accum;
-
-    accum_x = (proc->prx_movement[block_y][block_x]+proc->prx_movement[block_y][block_x+1]+proc->prx_movement[block_y+1][block_x]+proc->prx_movement[block_y+1][block_x+1])/4;
-    accum_y = (proc->pry_movement[block_y][block_x]+proc->pry_movement[block_y][block_x+1]+proc->pry_movement[block_y+1][block_x]+proc->pry_movement[block_y+1][block_x+1])/4;
-
-    if(accum_x > accum_y)
-        accum = accum_x;
-    else
-        accum = accum_y;
-
-    return accum;
-
-}
-
 static void entropic_enc(LheProcessing *proc, LheContext *s, uint8_t *hops, uint16_t block_y_ini, uint16_t block_y_fin, int channel) {
 
     int xini, yini, xfin_downsampled, yfin_downsampled, pix, dif_pix, mode, condition_length, rlc_length, block_x, inc_x, h0_counter,
@@ -3044,25 +3007,42 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
 
             //Ajuste de adyacencias junio 2018
             if (block_x < total_blocks_width-1 && block_y < total_blocks_height-1){
-                (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])/2;
-                (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])/2;
-                (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])/2;
-                (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
-
-                (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] = ( (&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] )/2;
-                (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] =  ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2;
-                (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] = ( (&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] )/2;
-                (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] =  ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
-
-                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])/2;
-                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])/2;
-                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])/2;
-                (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
                 
-                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] )/2;
-                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2;
-                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] )/2;
-                (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER] < (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])
+                    (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])/2;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER] < (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])
+                    (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])/2;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER] < (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])
+                    (&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])/2;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] < (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])
+                    (&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
+
+                if (((s->procY).advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]) < ((s->procY).advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER]))
+                    (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER])/2;
+                if (((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]) < ((&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER]))
+                    (&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2.0f;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER] < (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER])
+                    (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER])/2;
+                if ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] < (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])
+                    (&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = ((&s->procY)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procY)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
+
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[TOP_LEFT_CORNER])/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[TOP_LEFT_CORNER])/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_x[BOT_LEFT_CORNER])/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER] = ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y][block_x+1].ppp_y[BOT_LEFT_CORNER])/2;
+                
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER] < (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_LEFT_CORNER] )/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])
+                    (&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_x[TOP_RIGHT_CORNER])/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER] < (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER])
+                    (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] =  ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_LEFT_CORNER] )/2;
+                if ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])
+                    (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
             }
         }
     }

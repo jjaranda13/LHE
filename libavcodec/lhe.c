@@ -1328,3 +1328,40 @@ void mlhe_adapt_downsampled_data_resolution2 (LheProcessing *proc, LheImage *lhe
 		}
 	}
 }
+
+void pr_to_movement(LheProcessing *proc)
+{
+
+    int total_blocks_width, total_blocks_height, pixels_block, i, j;
+
+    total_blocks_width = HORIZONTAL_BLOCKS;
+    pixels_block = proc->width / HORIZONTAL_BLOCKS;
+    total_blocks_height = proc->height / pixels_block;
+
+    for (i = 0; i < total_blocks_width + 1; i++){
+        for (j = 0; j < total_blocks_height + 1; j++){
+            proc->prx_movement[j][i] = proc->perceptual_relevance_x[j][i] - proc->last_perceptual_relevance_x[j][i];
+            proc->pry_movement[j][i] = proc->perceptual_relevance_y[j][i] - proc->last_perceptual_relevance_y[j][i];
+            if (proc->prx_movement[j][i] < 0) proc->prx_movement[j][i] = -proc->prx_movement[j][i];
+            if (proc->pry_movement[j][i] < 0) proc->pry_movement[j][i] = -proc->pry_movement[j][i];
+        }
+    }
+
+}
+
+float get_block_movement(LheProcessing *proc, int block_x, int block_y)
+{
+    
+    float accum_y, accum_x, accum;
+
+    accum_x = (proc->prx_movement[block_y][block_x]+proc->prx_movement[block_y][block_x+1]+proc->prx_movement[block_y+1][block_x]+proc->prx_movement[block_y+1][block_x+1])/4;
+    accum_y = (proc->pry_movement[block_y][block_x]+proc->pry_movement[block_y][block_x+1]+proc->pry_movement[block_y+1][block_x]+proc->pry_movement[block_y+1][block_x+1])/4;
+
+    if(accum_x > accum_y)
+        accum = accum_x;
+    else
+        accum = accum_y;
+
+    return accum;
+
+}

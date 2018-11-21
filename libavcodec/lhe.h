@@ -307,3 +307,6 @@ void mlhe_oneshot_adaptres_and_compute_delta (LheProcessing *proc, LheImage *lhe
 void mlhe_adapt_downsampled_data_resolution2 (LheProcessing *proc, LheImage *lhe,
                                              uint8_t *intermediate_adapted_downsampled_data, uint8_t *adapted_downsampled_data,
                                              int block_x, int block_y);
+
+void pr_to_movement(LheProcessing *proc);
+float get_block_movement(LheProcessing *proc, int block_x, int block_y);
