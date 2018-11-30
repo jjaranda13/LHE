@@ -44,6 +44,7 @@ static const uint8_t lhe_sig[3] = "LHE";
 #define BASIC_LHE 0
 #define ADVANCED_LHE 1
 #define DELTA_MLHE 2
+#define VIDEO 2
 #define MIDDLE_VALUE false
 #define LUMINANCE_FACTOR 1
 #define BLOCK_WIDTH_Y 64
@@ -161,6 +162,9 @@ static const uint8_t lhe_sig[3] = "LHE";
 #define PPP_MAX 4
 #define ELASTIC_MAX 3
 #define MAX_QL 100
+
+#define TTL_MAX 30
+#define MOV_THRESHOLD 0
 
 //STREAMING
 //#define GOP 0

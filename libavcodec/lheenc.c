@@ -334,18 +334,18 @@ static int lhe_alloc_tables(AVCodecContext *ctx, LheContext *s)
             }                  
         
             //Advanced blocks
-            FF_ALLOC_ARRAY_OR_GOTO(s, (&s->procY)->buffer_advanced_block, total_blocks_height, sizeof(AdvancedLheBlock *), fail); 
+            FF_ALLOCZ_ARRAY_OR_GOTO(s, (&s->procY)->buffer_advanced_block, total_blocks_height, sizeof(AdvancedLheBlock *), fail); 
             
             for (int i=0; i < total_blocks_height; i++)
             {
-                FF_ALLOC_ARRAY_OR_GOTO(s, (&s->procY)->buffer_advanced_block[i], total_blocks_width, sizeof(AdvancedLheBlock), fail); 
+                FF_ALLOCZ_ARRAY_OR_GOTO(s, (&s->procY)->buffer_advanced_block[i], total_blocks_width, sizeof(AdvancedLheBlock), fail); 
             }
             
-            FF_ALLOC_ARRAY_OR_GOTO(s, (&s->procUV)->buffer_advanced_block, total_blocks_height, sizeof(AdvancedLheBlock *), fail); 
+            FF_ALLOCZ_ARRAY_OR_GOTO(s, (&s->procUV)->buffer_advanced_block, total_blocks_height, sizeof(AdvancedLheBlock *), fail); 
             
             for (int i=0; i < total_blocks_height; i++)
             {
-                FF_ALLOC_ARRAY_OR_GOTO(s, (&s->procUV)->buffer_advanced_block[i], total_blocks_width, sizeof(AdvancedLheBlock), fail); 
+                FF_ALLOCZ_ARRAY_OR_GOTO(s, (&s->procUV)->buffer_advanced_block[i], total_blocks_width, sizeof(AdvancedLheBlock), fail); 
             }
             
             FF_ALLOC_ARRAY_OR_GOTO(s, (&s->lheY)->downsampled_image, image_size_Y, sizeof(uint8_t), fail); 
@@ -589,16 +589,6 @@ static av_cold int lhe_encode_init(AVCodecContext *avctx)
     lhe_init_cache2(&s->prec);
     lhe_alloc_tables(avctx, s);
 
-    for (int block_y=0; block_y<total_blocks_height; block_y++)      
-    {  
-        for (int block_x=0; block_x<total_blocks_width; block_x++) 
-        {
-            lhe_calculate_block_coordinates (&s->procY, &s->procUV,
-                                             total_blocks_width, total_blocks_height,
-                                             block_x, block_y);
-        }
-    }
-
     (&s->procY)->perceptual_relevance_x = (&s->procY)->buffer_perceptual_relevance_x;
     (&s->procY)->perceptual_relevance_y = (&s->procY)->buffer_perceptual_relevance_y;
 
@@ -619,6 +609,23 @@ static av_cold int lhe_encode_init(AVCodecContext *avctx)
 
     (&s->procY)->advanced_block = (&s->procY)->buffer_advanced_block;
     (&s->procUV)->advanced_block = (&s->procUV)->buffer_advanced_block;
+
+    (&s->procY)->last_advanced_block = (&s->procY)->buffer1_advanced_block;
+    (&s->procUV)->last_advanced_block = (&s->procUV)->buffer1_advanced_block;
+
+    for (int block_y=0; block_y<total_blocks_height; block_y++)      
+    {  
+        for (int block_x=0; block_x<total_blocks_width; block_x++) 
+        {
+            lhe_calculate_block_coordinates (&s->procY, &s->procUV,
+                                             total_blocks_width, total_blocks_height,
+                                             block_x, block_y);
+            (&s->procY)->advanced_block[block_y][block_x].block_ttl=0;
+            (&s->procUV)->advanced_block[block_y][block_x].block_ttl=0;
+            (&s->procY)->last_advanced_block[block_y][block_x].block_ttl=0;
+            (&s->procUV)->last_advanced_block[block_y][block_x].block_ttl=0;
+        }
+    }
 
     s->dif_frames_count = s->gop_reconf;
 
@@ -1687,29 +1694,13 @@ static void lhe_advanced_encode_block2_sequential (LheBasicPrec *prec, LheProces
     xini = proc->basic_block[block_y][block_x].x_ini;
     yini = proc->basic_block[block_y][block_x].y_ini;
 
-    if (lhe_type == DELTA_MLHE) {
+    if (lhe_type == VIDEO) {
         xfin = proc->advanced_block[block_y][block_x].x_fin_downsampled;    
         yfin = proc->advanced_block[block_y][block_x].y_fin_downsampled;
         component_original_data = lhe->delta;
         dif_line = proc->width - xfin + xini;
         dif_pix = dif_line;
         pix_original_data = yini*proc->width + xini;
-        pix = yini*proc->width + xini;
-    } else if (lhe_type == ADVANCED_LHE) {        
-        xfin = proc->advanced_block[block_y][block_x].x_fin_downsampled;    
-        yfin = proc->advanced_block[block_y][block_x].y_fin_downsampled;
-        component_original_data = lhe->downsampled_image;
-        dif_line = proc->width - xfin + xini;
-        dif_pix = dif_line;
-        pix_original_data = yini*proc->width + xini;
-        pix = yini*proc->width + xini;
-    } else { //BASIC_LHE
-        xfin = proc->basic_block[block_y][block_x].x_fin;
-        yfin = proc->basic_block[block_y][block_x].y_fin;
-        component_original_data = original_data;
-        dif_line = linesize - xfin + xini;
-        dif_pix = proc->width - xfin + xini;
-        pix_original_data = yini*linesize + xini;
         pix = yini*proc->width + xini;
     }
 
@@ -1738,8 +1729,10 @@ static void lhe_advanced_encode_block2_sequential (LheBasicPrec *prec, LheProces
     num_block = block_y * total_blocks_width + block_x;
     oc = component_original_data[pix_original_data];//original color
 
+    //av_log(NULL, AV_LOG_WARNING, "block_ttl %d\n", block_ttl);
     if (num_block == 0) lhe->first_color_block[num_block]=oc;
     if (block_ttl == 30) {
+        //av_log(NULL, AV_LOG_PANIC, "BLOQUE I!!!!!!!!!!!!!\n");
         if (block_x == 0 && block_y == 0) prev_color = oc;
         else if (block_x == 0) prev_color = lhe->downsampled_player_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini];
         else if (block_y == 0) prev_color = lhe->downsampled_player_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1];
@@ -1747,6 +1740,8 @@ static void lhe_advanced_encode_block2_sequential (LheBasicPrec *prec, LheProces
     } else {
         if (block_x == 0 && block_y == 0) prev_color = oc;
         else prev_color = 128;
+        //Para nueva prediccion del pixel inicial del bloque P
+        //else prev_color = (lhe->downsampled_player_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1]+lhe->downsampled_player_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini])/2;
     }
     quantum = oc; //final quantum asigned value
 
@@ -1773,12 +1768,10 @@ static void lhe_advanced_encode_block2_sequential (LheBasicPrec *prec, LheProces
                 if (y >0 && x != xini) {
                     if (block_ttl == 30){
                         hop0=(prev_color + lhe->downsampled_player_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+x_prev])/2;
-                    } else {
-                        hop0=prev_color;
+                    } else { //TTL < 30
+                        hop0=component_prediction[pix-1];//prev_color;
                     }
-
-                }
-                else hop0=prev_color;
+                } else hop0=prev_color;//Primera línea y primer pixel
             } else { //Lateral derecho
                 hop0=(prev_color+component_prediction[pix-proc->width])>>1;
             }
@@ -1790,6 +1783,11 @@ static void lhe_advanced_encode_block2_sequential (LheBasicPrec *prec, LheProces
                 else if (hop0 < 0) hop0 = 0;
             }
             
+            //if (block_ttl < 30 && y+x != 0){
+            //    hop0 = 128;
+           // }
+
+
             //-------------------------PHASE 2: HOPS COMPUTATION-------------------------------
             hop_number = 4;// prediction corresponds with hop_number=4
             quantum = hop0;//this is the initial predicted quantum, the value of prediction
@@ -2129,7 +2127,7 @@ static void lhe_advanced_compute_perceptual_relevance (LheContext *s, uint8_t *c
     half_block_width = (block_width >>1);
     half_block_height = (block_width >>1);
 
-    #pragma omp parallel for schedule(static)
+    //#pragma omp parallel for schedule(static)
     for (int block_y=0; block_y<total_blocks_height+1; block_y++)      
     {
         for (int block_x=0; block_x<total_blocks_width+1; block_x++) 
@@ -2577,7 +2575,7 @@ static float lhe_advanced_encode (LheContext *s, const AVFrame *frame,
     gettimeofday(&t_ini, NULL);
     for (int i = 0; i < 1000; i++){
 */
-    #pragma omp parallel for schedule(static)
+    //#pragma omp parallel for schedule(static)
     for (int block_y=0; block_y<total_blocks_height; block_y++) 
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -2716,7 +2714,7 @@ static float lhe_advanced_encode (LheContext *s, const AVFrame *frame,
     }
 
     for (int i = -(int)total_blocks_height+1; i < (int)total_blocks_width; i++){
-        #pragma omp parallel for schedule(static)
+        //#pragma omp parallel for schedule(static)
         for (int block_y2=total_blocks_height-1; block_y2>=0; block_y2--) 
         {
             int block_y = (block_y2*(total_blocks_height-1))%total_blocks_height;
@@ -2958,21 +2956,36 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
         {
-            (&s->procY)->advanced_block[block_y][block_x].block_ttl=30;
-            (&s->procUV)->advanced_block[block_y][block_x].block_ttl=30;
+
+            (&s->procY)->advanced_block[block_y][block_x].block_ttl = (&s->procY)->last_advanced_block[block_y][block_x].block_ttl;
+            (&s->procUV)->advanced_block[block_y][block_x].block_ttl = (&s->procUV)->last_advanced_block[block_y][block_x].block_ttl;   
+            (&s->procY)->advanced_block[block_y][block_x].block_ttl--;
+            (&s->procUV)->advanced_block[block_y][block_x].block_ttl--;
+            //av_log(NULL, AV_LOG_WARNING, "block_ttl antes %d\n", (&s->procY)->advanced_block[block_y][block_x].block_ttl);
             if ((&s->procY)->advanced_block[block_y][block_x].block_ttl <= 0) {
-                (&s->procY)->advanced_block[block_y][block_x].block_ttl = 30;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
-                (&s->procUV)->advanced_block[block_y][block_x].block_ttl = 30;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
+                (&s->procY)->advanced_block[block_y][block_x].block_ttl = TTL_MAX;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
+                (&s->procUV)->advanced_block[block_y][block_x].block_ttl = TTL_MAX;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
                 continue;
             }
-            
-            if(get_block_movement(&s->procY, block_x, block_y) > 0.26){
+
+            //av_log(NULL, AV_LOG_WARNING, "block_ttl movement %d\n", (&s->procY)->advanced_block[block_y][block_x].block_ttl);
+
+            if(get_block_movement(&s->procY, block_x, block_y) > MOV_THRESHOLD){
                 //BLOCK I
-                (&s->procY)->advanced_block[block_y][block_x].block_ttl = 30;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
-                (&s->procUV)->advanced_block[block_y][block_x].block_ttl = 30;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
+                (&s->procY)->advanced_block[block_y][block_x].block_ttl = TTL_MAX;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
+                (&s->procUV)->advanced_block[block_y][block_x].block_ttl = TTL_MAX;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
             } else {
                 //BLOCK P
-
+                /*if ((&s->procY)->advanced_block[block_y][block_x].block_ttl < 25){
+                    (&s->procY)->perceptual_relevance_x[block_y][block_x] = 1;
+                    (&s->procY)->perceptual_relevance_y[block_y][block_x] = 1;
+                    (&s->procY)->perceptual_relevance_x[block_y+1][block_x] = 1;
+                    (&s->procY)->perceptual_relevance_y[block_y+1][block_x] = 1;
+                    (&s->procY)->perceptual_relevance_x[block_y][block_x+1] = 1;
+                    (&s->procY)->perceptual_relevance_y[block_y][block_x+1] = 1;
+                    (&s->procY)->perceptual_relevance_x[block_y+1][block_x+1] = 1;
+                    (&s->procY)->perceptual_relevance_y[block_y+1][block_x+1] = 1;
+                }*/
                 //Aqui vamos a programar la mejora de resolución en bloques muy estáticos
                 //Si el movimiento es 0 (get_block_movement = =0) y el TTL es menor que 26 (4 frames quieto) then
                 // PR = 1 en sus cuatro esquinas (8 PR) ojo!! en el array PR_aux
@@ -2980,7 +2993,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
         }
     }
 
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3047,7 +3060,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
         }
     }
 
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3062,7 +3075,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
         }
     }
 
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3083,7 +3096,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     }
     
     for (int i = -(int)total_blocks_height+1; i < (int)total_blocks_width; i++){
-        #pragma omp parallel for
+        //#pragma omp parallel for
         for (int block_y=total_blocks_height-1; block_y>=0; block_y--) 
         {
             int block_x = i + total_blocks_height -1 - block_y;
@@ -3106,7 +3119,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     }    
 
     //CHROMINANCE U            
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3118,7 +3131,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
         }
     }
 
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3139,7 +3152,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     }
 
     for (int i = -(int)total_blocks_height+1; i < (int)total_blocks_width; i++){
-        #pragma omp parallel for
+        //#pragma omp parallel for
         for (int block_y=total_blocks_height-1; block_y>=0; block_y--) 
         {
             int block_x = i + total_blocks_height -1 - block_y;
@@ -3162,7 +3175,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     }
 
     //CHROMINANCE_V
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3174,7 +3187,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
         }
     }
 
-    #pragma omp parallel for
+    //#pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3195,7 +3208,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     }
 
     for (int i = -(int)total_blocks_height+1; i < (int)total_blocks_width; i++){
-        #pragma omp parallel for
+        //#pragma omp parallel for
         for (int block_y=total_blocks_height-1; block_y>=0; block_y--) 
         {
             int block_x = i + total_blocks_height -1 - block_y;
