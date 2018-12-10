@@ -1754,6 +1754,244 @@ static void mlhe_decode_delta_frame (LheState *s, uint32_t image_size_Y, uint32_
     }     
 }
 
+static void mlhe_decode_block_ip (LheBasicPrec *prec, LheProcessing *proc, LheImage *lhe,
+                                                         uint32_t total_blocks_width, uint32_t block_x, uint32_t block_y) 
+{
+
+    int h1, dif_line, dif_pix, pix, pix_original_data, block_ttl, ratioX, ratioY;
+    int hop0, quantum, hop_number, prev_color, y_prev, x_prev;
+    bool last_small_hop, small_hop;
+    int xini, xfin, yini, yfin, num_block, grad;
+    const int max_h1 = 10;
+    const int min_h1 = 4;
+    const int start_h1 = min_h1;//(max_h1+min_h1)/2;
+    //Block P case
+    int tramo1, tramo2, signo;
+    uint32_t downsampled_x_side, downsampled_y_side, last_downsampled_x_side, last_downsampled_y_side;
+
+    tramo1 = 52;
+    tramo2 = 204;
+
+    grad = 0;
+    
+    //gettimeofday(&before , NULL);
+    //for (int i = 0; i < 5000; i++){
+
+    xini = proc->basic_block[block_y][block_x].x_ini;
+    yini = proc->basic_block[block_y][block_x].y_ini;
+    xfin = proc->advanced_block[block_y][block_x].x_fin_downsampled;    
+    yfin = proc->advanced_block[block_y][block_x].y_fin_downsampled;
+    dif_line = proc->width - xfin + xini;
+    dif_pix = dif_line;
+    pix_original_data = yini*proc->width + xini;
+    pix = yini*proc->width + xini;
+
+    block_ttl = proc->advanced_block[block_y][block_x].block_ttl;
+
+    ratioY = 1;
+    if (block_x > 0){
+        ratioY = 1000*(proc->advanced_block[block_y][block_x-1].y_fin_downsampled - proc->basic_block[block_y][block_x-1].y_ini)/(yfin - yini);
+    }
+
+    ratioX = 1;
+    if (block_y > 0){
+        ratioX = 1000*(proc->advanced_block[block_y-1][block_x].x_fin_downsampled - proc->basic_block[block_y-1][block_x].x_ini)/(xfin - xini);
+    }
+
+    h1 = start_h1;
+    last_small_hop = true;//true; //last hop was small
+    small_hop = false;//true;//current hop is small
+    hop0 = 0; //prediction
+    hop_number = 4;// final assigned hop
+    num_block = block_y * total_blocks_width + block_x;
+
+    //av_log(NULL, AV_LOG_WARNING, "block_ttl %d\n", block_ttl);
+    if (num_block == 0) lhe->downsampled_image[pix]=lhe->first_color_block[0];
+    //if (block_ttl == 30) {
+        if (block_x == 0 && block_y == 0) prev_color = lhe->first_color_block[0];
+        else if (block_x == 0) prev_color = lhe->downsampled_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini];
+        else if (block_y == 0) prev_color = lhe->downsampled_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1];
+        else prev_color = (lhe->downsampled_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1]+lhe->downsampled_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini])/2;
+    /*} else {
+        if (block_x == 0 && block_y == 0) prev_color = lhe->first_color_block[0];
+        //else prev_color = 128;
+        //Para nueva prediccion del pixel inicial del bloque P
+        else if (block_x == 0) prev_color = lhe->downsampled_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini];
+        else if (block_y == 0) prev_color = lhe->downsampled_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1];
+        else prev_color = (lhe->downsampled_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1]+lhe->downsampled_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini])/2;
+    }*/
+
+    for (int y=yini; y < yfin; y++)  {
+        y_prev = ((y-yini)*ratioY/1000)+yini;
+        for (int x=xini; x < xfin; x++)     {
+            x_prev = ((x-xini)*ratioX/1000)+xini;
+            
+            if (y>yini && x>xini && x<(xfin-1)) { //Interior del bloque
+                hop0=(prev_color+lhe->downsampled_image[pix-proc->width+1])>>1;
+            } else if (x==xini && y>yini) { //Lateral izquierdo
+                if (x > 0) {
+                    if (block_ttl == 30) {
+                        hop0=(lhe->downsampled_image[y_prev*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1]+lhe->downsampled_image[pix-proc->width+1])/2;
+                    } else {
+                        hop0=lhe->downsampled_image[pix-proc->width];
+                    }                
+                } 
+                else hop0=lhe->downsampled_image[pix-proc->width];
+                last_small_hop = true;
+                h1 = start_h1;
+            } else if (y == yini) { //Lateral superior y pixel inicial
+                if (y >0 && x != xini) {
+                    if (block_ttl == 30){
+                        hop0=(prev_color + lhe->downsampled_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+x_prev])/2;
+                    } else { //TTL < 30
+                        hop0=lhe->downsampled_image[pix-1];//prev_color;
+                    }
+                } else hop0=prev_color;//Primera línea y primer pixel
+            } else { //Lateral derecho
+                hop0=(prev_color+lhe->downsampled_image[pix-proc->width])>>1;
+            }
+
+            if (block_ttl == 30)//if (lhe_type != DELTA_MLHE) ///////CAMBIO POR BLOQUES IP!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+            {
+                hop0 = hop0 + grad;
+                if (hop0 > 255) hop0 = 255;
+                else if (hop0 < 0) hop0 = 0;
+            }
+
+            //-------------------------PHASE 2-------------------------------------------
+            hop_number = lhe->hops[pix];
+
+            if (hop_number == 4){
+                quantum = hop0;
+                small_hop = true;
+            } else if (hop_number == 5) {
+                quantum = hop0 + h1;
+                small_hop = true;
+            } else if (hop_number == 3) {
+                quantum = hop0 - h1;
+                small_hop = true;
+            } else {
+                small_hop = false;
+                if (hop_number > 5) {
+                    quantum = 255 - prec->cache_hops[255-hop0][h1-4][8 - hop_number];
+                } else {
+                    quantum = prec->cache_hops[hop0][h1-4][hop_number];
+                }
+            }
+////////////////////////////////////////Calculo del delta imaginario del pixel inicial//////////////////////////
+            if(block_ttl < 30 && x == xini && y == yini){
+                int delta_int;
+                delta_int = quantum - lhe->last_downsampled_image[y * proc->width + x];
+
+                signo = 1;
+                if (delta_int < 0) {
+                    signo = -1;
+                    delta_int = -delta_int;
+                }
+
+                if (delta_int >= tramo2) delta_int = tramo2-1;
+
+                if (delta_int < tramo1) {
+                
+                } else {
+                    delta_int = delta_int - tramo1;
+                    delta_int = tramo1 + delta_int/2;
+                }
+                delta_int = signo*delta_int+128;
+                quantum = delta_int;
+            }
+
+            //------------- PHASE 3 --------------------------
+            lhe->downsampled_image[pix]=quantum;
+            prev_color=quantum;
+
+            //------------- PHASE 4: h1 logic  --------------------------
+            if(block_ttl < 30 && x == xini && y == yini){
+            if (hop_number>5 || hop_number<3) small_hop=false; //true by default
+            if (small_hop==true && last_small_hop==true) {
+                if (h1>min_h1) h1--;
+            } else {
+                h1=max_h1;
+            }
+
+            last_small_hop=small_hop;
+
+            if (hop_number == 5) grad = 1;
+            else if (hop_number == 3) grad = -1;
+            else if (!small_hop) grad = 0;
+            }
+            pix++;
+            pix_original_data++;
+        }
+        pix+=dif_pix;
+        pix_original_data+=dif_line;
+    }
+
+    int delta, image;
+
+    if (block_ttl < 30){
+
+        downsampled_x_side = proc->advanced_block[block_y][block_x].downsampled_x_side;
+        downsampled_y_side = proc->advanced_block[block_y][block_x].downsampled_y_side;
+        last_downsampled_x_side = proc->last_advanced_block[block_y][block_x].downsampled_x_side;
+        last_downsampled_y_side = proc->last_advanced_block[block_y][block_x].downsampled_y_side;
+
+        ratioY = (1000*last_downsampled_y_side)/downsampled_y_side;
+        ratioX = (1000*last_downsampled_x_side)/downsampled_x_side;
+        pix = yini*proc->width + xini;
+
+        for (int y=yini; y < yfin; y++)  {
+            y_prev = ((y-yini)*ratioY/1000)+yini;
+            for (int x=xini; x < xfin; x++)     {
+                /*if (pix == (yini*proc->width + xini)) {
+                    pix++;
+                    continue;
+                }*/
+                x_prev = ((x-xini)*ratioX/1000)+xini;
+              
+                delta = lhe->downsampled_image[pix];
+                delta = delta-128;
+                signo = 0;
+                if (delta < 0) {
+                    signo = 1;
+                    delta = -delta;
+                }
+
+                if (delta < tramo1){
+                    if (signo == 0) image = lhe->last_downsampled_image[y_prev * proc->width + x_prev] + delta;
+                    else image = lhe->last_downsampled_image[y_prev * proc->width + x_prev] - delta;
+                 } else  if (delta <= tramo1+(tramo2-tramo1)/2){
+                    delta = (delta - tramo1)*2;
+                    delta += tramo1;
+                    if (signo == 0) image = lhe->last_downsampled_image[y_prev * proc->width + x_prev] + delta;
+                    else image = lhe->last_downsampled_image[y_prev * proc->width + x_prev] - delta;
+                } else {
+                    delta = (delta - (tramo2 - tramo1)/2 - tramo1)*4;
+                    delta += tramo2;
+                    if (signo == 0) image = lhe->last_downsampled_image[y_prev * proc->width + x_prev] + delta;
+                    else image = lhe->last_downsampled_image[y_prev * proc->width + x_prev] - delta;
+                }
+                
+                if (image > 255) 
+                {
+                    image = 255;
+                }
+                else if (image < 1) 
+                {
+                    image = 1;
+                }
+
+                lhe->downsampled_image[pix] = image;
+
+                pix++;
+            } //end for
+            pix+=dif_pix;    
+        } //end for
+    }//end if
+
+
+}
+
 /**
  * Decodes symbols in advanced LHE file
  * 
@@ -1775,7 +2013,21 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
         {
             int block_x = i + s->total_blocks_height -1 - block_y;
             if (block_x >= 0 && block_x < s->total_blocks_width) {
-                if ((&s->procY)->advanced_block[block_y][block_x].block_ttl == TTL_MAX) {
+                
+                //Luminance
+                //mlhe_adapt_downsampled_data_resolution2 (&s->procY, &s->lheY, intermediate_adapted_downsampled_data_Y_dec, 
+                //                                            adapted_downsampled_image_Y, block_x, block_y);
+                mlhe_decode_block_ip (&s->prec, &s->procY, &s->lheY, s->total_blocks_width, block_x, block_y);
+                //Chrominance U                    
+                //mlhe_adapt_downsampled_data_resolution2 (&s->procUV, &s->lheU, intermediate_adapted_downsampled_data_U_dec,
+                //                                            adapted_downsampled_image_U, block_x, block_y);
+                mlhe_decode_block_ip (&s->prec, &s->procUV, &s->lheU, s->total_blocks_width, block_x, block_y);
+                //Chrominance V            
+                //mlhe_adapt_downsampled_data_resolution2 (&s->procUV, &s->lheV, intermediate_adapted_downsampled_data_V_dec, adapted_downsampled_image_V,
+                //                                            block_x, block_y);
+                mlhe_decode_block_ip (&s->prec, &s->procUV, &s->lheV, s->total_blocks_width, block_x, block_y);
+
+                /*if ((&s->procY)->advanced_block[block_y][block_x].block_ttl == TTL_MAX) {
                     //Luminance
                     lhe_advanced_decode_one_hop_per_pixel_block(&s->prec, &s->procY, &s->lheY, s->total_blocks_width, block_x, block_y);
                     //Chrominance U
@@ -1800,7 +2052,8 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
                                                             block_x, block_y);
                     mlhe_decode_delta (&s->prec, &s->procUV, &s->lheV, delta_prediction_V_dec, 
                                        adapted_downsampled_image_V, s->total_blocks_width, block_x, block_y);
-                }
+                }*/
+
             }
         }
 

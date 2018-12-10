@@ -1685,6 +1685,10 @@ static void lhe_advanced_encode_block2_sequential (LheBasicPrec *prec, LheProces
     const int max_h1 = 10;
     const int min_h1 = 4;
     const int start_h1 = min_h1;//(max_h1+min_h1)/2;
+    //First pixel block P variables
+    int tramo1, tramo2, signo;
+    tramo1 = 52;
+    tramo2 = 204;
 
     grad = 0;
     
@@ -1731,18 +1735,18 @@ static void lhe_advanced_encode_block2_sequential (LheBasicPrec *prec, LheProces
 
     //av_log(NULL, AV_LOG_WARNING, "block_ttl %d\n", block_ttl);
     if (num_block == 0) lhe->first_color_block[num_block]=oc;
-    if (block_ttl == 30) {
+    //if (block_ttl == 30) {
         //av_log(NULL, AV_LOG_PANIC, "BLOQUE I!!!!!!!!!!!!!\n");
-        if (block_x == 0 && block_y == 0) prev_color = oc;
-        else if (block_x == 0) prev_color = lhe->downsampled_player_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini];
-        else if (block_y == 0) prev_color = lhe->downsampled_player_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1];
-        else prev_color = (lhe->downsampled_player_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1]+lhe->downsampled_player_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini])/2;
-    } else {
-        if (block_x == 0 && block_y == 0) prev_color = oc;
-        else prev_color = 128;
+    if (block_x == 0 && block_y == 0) prev_color = oc;
+    else if (block_x == 0) prev_color = lhe->downsampled_player_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini];
+    else if (block_y == 0) prev_color = lhe->downsampled_player_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1];
+    else prev_color = (lhe->downsampled_player_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1]+lhe->downsampled_player_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini])/2;
+    //} else {
+    //    if (block_x == 0 && block_y == 0) prev_color = oc;
+        //else prev_color = 128;
         //Para nueva prediccion del pixel inicial del bloque P
         //else prev_color = (lhe->downsampled_player_image[yini*proc->width + proc->advanced_block[block_y][block_x-1].x_fin_downsampled-1]+lhe->downsampled_player_image[(proc->advanced_block[block_y-1][block_x].y_fin_downsampled-1)*proc->width+xini])/2;
-    }
+    //}
     quantum = oc; //final quantum asigned value
 
     for (int y = yini; y < yfin; y++) {
@@ -1782,11 +1786,6 @@ static void lhe_advanced_encode_block2_sequential (LheBasicPrec *prec, LheProces
                 if (hop0 > 255) hop0 = 255;
                 else if (hop0 < 0) hop0 = 0;
             }
-            
-            //if (block_ttl < 30 && y+x != 0){
-            //    hop0 = 128;
-           // }
-
 
             //-------------------------PHASE 2: HOPS COMPUTATION-------------------------------
             hop_number = 4;// prediction corresponds with hop_number=4
@@ -1845,12 +1844,36 @@ static void lhe_advanced_encode_block2_sequential (LheBasicPrec *prec, LheProces
                     }
                 }
             }//endif emin
+            
+            ////////////////////////////////////////Calculo del delta imaginario del pixel inicial//////////////////////////
+            if(block_ttl < 30 && x == xini && y == yini){
+                int delta_int;
+                delta_int = quantum - lhe->last_downsampled_image[y * proc->width + x];
+
+                signo = 1;
+                if (delta_int < 0) {
+                    signo = -1;
+                    delta_int = -delta_int;
+                }
+
+                if (delta_int >= tramo2) delta_int = tramo2-1;
+
+                if (delta_int < tramo1) {
+                
+                } else {
+                    delta_int = delta_int - tramo1;
+                    delta_int = tramo1 + delta_int/2;
+                }
+                delta_int = signo*delta_int+128;
+                quantum = delta_int;   
+            }
             //------------- PHASE 3: assignment of final quantized value --------------------------
             phase3:    
             component_prediction[pix]=quantum;
             prev_color=quantum;
             hops[pix]=hop_number;
             //------------- PHASE 4: h1 logic  --------------------------
+            if(block_ttl < 30 && x == xini && y == yini){
             if (hop_number>5 || hop_number<3) small_hop=false; //true by default
             if (small_hop==true && last_small_hop==true) {
                 if (h1>min_h1) h1--;
@@ -1863,6 +1886,7 @@ static void lhe_advanced_encode_block2_sequential (LheBasicPrec *prec, LheProces
             if (hop_number == 5) grad = 1;
             else if (hop_number == 3) grad = -1;
             else if (!small_hop) grad = 0;
+            }
 
             pix++;
             pix_original_data++;
@@ -2781,6 +2805,12 @@ static void mlhe_oneshot_calculate_player_image (LheProcessing *proc, LheImage *
         for (x = xini; x < xfin; x++) {
             xprev = (((x-xini) * ratioX)/1000)+xini;
             delta = lhe->component_prediction[y * proc->width + x];
+
+            //BLOQUE IP PIXEL INIT
+            /*if(x == xini && y == yini) {
+                lhe->downsampled_player_image[y * proc->width + x] = delta;
+                continue;
+            }*/
 
             delta = delta-128;
             signo = 1;

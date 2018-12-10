@@ -164,7 +164,7 @@ static const uint8_t lhe_sig[3] = "LHE";
 #define MAX_QL 100
 
 #define TTL_MAX 30
-#define MOV_THRESHOLD 0
+#define MOV_THRESHOLD 0.2
 
 //STREAMING
 //#define GOP 0

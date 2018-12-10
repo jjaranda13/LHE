@@ -1224,9 +1224,6 @@ void mlhe_oneshot_adaptres_and_compute_delta (LheProcessing *proc, LheImage *lhe
 
     dif_tramo = tramo1 + (tramo2-tramo1)>>1;
 
-
-
-
     down_image = lhe->downsampled_image;
     last_down_image = lhe->last_downsampled_image;
     delta = lhe->delta;
@@ -1253,7 +1250,12 @@ void mlhe_oneshot_adaptres_and_compute_delta (LheProcessing *proc, LheImage *lhe
 
 			//delta_int = (down_image[y * proc->width + x] - last_down_image[yprev * proc->width + xprev]) / 4 + 128;
 
-			delta_int = down_image[y * proc->width + x] - last_down_image[yprev * proc->width + xprev];
+            //BLOQUE IP PIXEL INICIAL
+            if (x == xini && y == yini) {
+                delta[y * proc->width + x] = down_image[y * proc->width + x];
+                continue;
+            }
+            else delta_int = down_image[y * proc->width + x] - last_down_image[yprev * proc->width + xprev];
 
 			signo = 1;
 			if (delta_int < 0) {
@@ -1264,27 +1266,12 @@ void mlhe_oneshot_adaptres_and_compute_delta (LheProcessing *proc, LheImage *lhe
 			if (delta_int >= tramo2) delta_int = tramo2-1;
 
 			if (delta_int < tramo1) {
-				//if (delta_int <= 6) delta_int = 0;
-			} else {// if (delta_int < tramo2) {
+
+			} else {
 				delta_int = delta_int - tramo1;
 				delta_int = tramo1 + delta_int/2;
-			} /*else {
-				delta_int = delta_int - tramo2;
-				delta_int = dif_tramo + delta_int/4;
-				av_log(NULL, AV_LOG_INFO, "3\n");
 			}
-			*/
 			delta_int = signo*delta_int+128;
-
-
-			//if (delta_int < 0 || delta_int > 255) av_log(NULL, AV_LOG_INFO, "Se ha salido de los limites delta_int %d\n", delta_int);
-
-			//if (delta_int >= -500 && delta_int <= 800) delta_int = 128;
-
-
-
-			//if (delta_int > 255) delta_int = 255;
-            //else if (delta_int < 1) delta_int = 1;
 
 			delta[y * proc->width + x] = delta_int;
 
