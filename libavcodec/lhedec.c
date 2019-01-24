@@ -754,7 +754,7 @@ static void lhe_advanced_read_mesh (LheState *s, LheHuffEntry *he_mesh, float pp
     
     lhe_advanced_read_perceptual_relevance_interval (s, he_mesh, procY->perceptual_relevance_y);
     
-    //#pragma omp parallel
+    #pragma omp parallel
     for (int block_y=0; block_y<s->total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<s->total_blocks_width; block_x++)
@@ -1703,7 +1703,7 @@ static void mlhe_decode_delta (LheBasicPrec *prec, LheProcessing *proc, LheImage
 static void mlhe_decode_delta_frame (LheState *s, uint32_t image_size_Y, uint32_t image_size_UV) 
 {
        
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int block_y=0; block_y<s->total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<s->total_blocks_width; block_x++)
@@ -2008,7 +2008,7 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
     s->procUV.perceptual_relevance_x = s->procY.perceptual_relevance_x;
     //#pragma omp parallel for
     for (int i = -(int)s->total_blocks_height+1; i < (int)s->total_blocks_width; i++){
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int block_y=s->total_blocks_height-1; block_y>=0; block_y--) 
         {
             int block_x = i + s->total_blocks_height -1 - block_y;
@@ -2060,7 +2060,7 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
     }
 
     for (int i = -(int)s->total_blocks_height+1; i < (int)s->total_blocks_width; i++){
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int block_y=s->total_blocks_height-1; block_y>=0; block_y--) 
         {
             int block_x = i + s->total_blocks_height -1 - block_y;
@@ -2079,7 +2079,7 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
     }
 
     for (int i = -(int)s->total_blocks_height+1; i < (int)s->total_blocks_width; i++){
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int block_y=s->total_blocks_height-1; block_y>=0; block_y--) 
         {
             int block_x = i + s->total_blocks_height -1 - block_y;

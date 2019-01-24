@@ -2738,7 +2738,7 @@ static float lhe_advanced_encode (LheContext *s, const AVFrame *frame,
     }
 
     for (int i = -(int)total_blocks_height+1; i < (int)total_blocks_width; i++){
-        //#pragma omp parallel for schedule(static)
+        #pragma omp parallel for schedule(static)
         for (int block_y2=total_blocks_height-1; block_y2>=0; block_y2--) 
         {
             int block_y = (block_y2*(total_blocks_height-1))%total_blocks_height;
@@ -3023,7 +3023,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
         }
     }
 
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3090,7 +3090,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
         }
     }
 
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3105,7 +3105,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
         }
     }
 
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3126,7 +3126,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     }
     
     for (int i = -(int)total_blocks_height+1; i < (int)total_blocks_width; i++){
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int block_y=total_blocks_height-1; block_y>=0; block_y--) 
         {
             int block_x = i + total_blocks_height -1 - block_y;
@@ -3149,7 +3149,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     }    
 
     //CHROMINANCE U            
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3161,7 +3161,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
         }
     }
 
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3182,7 +3182,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     }
 
     for (int i = -(int)total_blocks_height+1; i < (int)total_blocks_width; i++){
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int block_y=total_blocks_height-1; block_y>=0; block_y--) 
         {
             int block_x = i + total_blocks_height -1 - block_y;
@@ -3205,7 +3205,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     }
 
     //CHROMINANCE_V
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3217,7 +3217,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
         }
     }
 
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int block_y=0; block_y<total_blocks_height; block_y++)
     {
         for (int block_x=0; block_x<total_blocks_width; block_x++) 
@@ -3238,7 +3238,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
     }
 
     for (int i = -(int)total_blocks_height+1; i < (int)total_blocks_width; i++){
-        //#pragma omp parallel for
+        #pragma omp parallel for
         for (int block_y=total_blocks_height-1; block_y>=0; block_y--) 
         {
             int block_x = i + total_blocks_height -1 - block_y;
