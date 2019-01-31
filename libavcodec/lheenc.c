@@ -486,6 +486,9 @@ static void lhe_process_non_persistent_rectangles (LheContext *s)
     j = 0;
     index = 0;
 
+    //char list[] = "1000,0,0,1920,0,1080,1,0,1000,0,1080";
+    //s->rectangle_list = list;
+
     if (s->rectangle_list == NULL)
         return;
 
@@ -496,7 +499,6 @@ static void lhe_process_non_persistent_rectangles (LheContext *s)
 		s->rectangles_TTL = atoi(token);
 		token = strtok(NULL, ",");
 	}
-
 
 	while (token != NULL)
 	{
@@ -535,6 +537,7 @@ static void lhe_process_non_persistent_rectangles (LheContext *s)
 			s->protected_rectangles[0].active = 0;
 		}
 	}
+
 }
 
 /**
@@ -2199,7 +2202,7 @@ static void lhe_advanced_compute_perceptual_relevance (LheContext *s, uint8_t *c
 
             //gettimeofday(&before , NULL);
             //for (int i = 0; i < 1000; i++){
-
+            
             for (int i = 0; i < MAX_RECTANGLES; i++){
                 if (s->protected_rectangles[i].active) {
                     if (!((s->protected_rectangles[i].xfin <= xini_pr_block) || (s->protected_rectangles[i].xini >= xfin_pr_block) || 
@@ -3378,6 +3381,7 @@ static int lhe_encode_close(AVCodecContext *avctx)
 #define OFFSET(x) offsetof(LheContext, x)
 #define VE AV_OPT_FLAG_VIDEO_PARAM | AV_OPT_FLAG_ENCODING_PARAM
 static const AVOption options[] = {
+    { "rect_list", "asdf", OFFSET(rectangle_list), AV_OPT_TYPE_STRING, { 0 }, 0, 0, VE },
     { "pr_metrics", "Print PR metrics", OFFSET(pr_metrics), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     { "basic_lhe", "Basic LHE", OFFSET(basic_lhe), AV_OPT_TYPE_BOOL, { .i64 = 0 }, 0, 1, VE },
     { "ql", "Quality level from 0 to 99", OFFSET(ql_reconf), AV_OPT_TYPE_INT, { .i64 = 25 }, 0, 99, VE },
