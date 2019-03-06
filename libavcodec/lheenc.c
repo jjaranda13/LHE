@@ -64,7 +64,7 @@ typedef struct LheContext {
     bool color_reconf;
     bool pr_metrics_active_reconf;
     uint8_t gop_reconf;
-    int frame_count;
+    float frame_count;
 } LheContext;
 
 uint8_t *intermediate_downsample_Y, *intermediate_downsample_U, *intermediate_downsample_V;
@@ -2992,8 +2992,8 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
 
             (&s->procY)->advanced_block[block_y][block_x].block_ttl = (&s->procY)->last_advanced_block[block_y][block_x].block_ttl;
             (&s->procUV)->advanced_block[block_y][block_x].block_ttl = (&s->procUV)->last_advanced_block[block_y][block_x].block_ttl;   
-            (&s->procY)->advanced_block[block_y][block_x].block_ttl--;
-            (&s->procUV)->advanced_block[block_y][block_x].block_ttl--;
+            (&s->procY)->advanced_block[block_y][block_x].block_ttl=30;//--;
+            (&s->procUV)->advanced_block[block_y][block_x].block_ttl=30;//--;
             //av_log(NULL, AV_LOG_WARNING, "block_ttl antes %d\n", (&s->procY)->advanced_block[block_y][block_x].block_ttl);
             if ((&s->procY)->advanced_block[block_y][block_x].block_ttl <= 0) {
                 (&s->procY)->advanced_block[block_y][block_x].block_ttl = TTL_MAX;     //////SUSTITUIR POR BLOCK GOP EN SU MOMENTO
@@ -3285,16 +3285,6 @@ static int mlhe_encode_video_ip(AVCodecContext *avctx, AVPacket *pkt,
         }
     }*/
 
-    //******************************EN PRUEBA, SI FALLA COMENTARLO********************************************//
-    float discard_interval = (float)30.0/(float)(s->skip_frames);
-    if (s->skip_frames > 0) {
-        s->frame_count++;
-        if (s->frame_count >= s->skip_frames) {
-            s->frame_count -= discard_interval;
-            return 0;
-        }
-    }
-
     image_size_Y = (&s->procY)->width * (&s->procY)->height;
     image_size_UV = (&s->procUV)->width * (&s->procUV)->height;
 
@@ -3314,6 +3304,16 @@ static int mlhe_encode_video_ip(AVCodecContext *avctx, AVPacket *pkt,
     component_original_data_V = frame->data[2];
 
     mlhe_reconfig(avctx, s);
+
+    //******************************EN PRUEBA, SI FALLA COMENTARLO********************************************//
+    float discard_interval = (float)30.0/(float)(s->skip_frames);
+    if (s->skip_frames > 0) {
+        s->frame_count++;
+        if (s->frame_count >= discard_interval) {
+            s->frame_count -= discard_interval;
+            return 0;
+        }
+    }
 
     mlhe_ip_frame_encode (s, frame, component_original_data_Y, component_original_data_U, component_original_data_V,
                              total_blocks_width, total_blocks_height);
