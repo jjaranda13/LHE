@@ -2227,7 +2227,7 @@ static void lhe_advanced_filter_epxp (LheState *s, int block_x, int block_y)
  * @param image_size_Y luminance image size
  * @param image_size_UV chrominance image size
  */
-static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint32_t image_size_UV)
+static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint32_t image_size_UV, bool is_image)
 {
     // Copy the pr fron Y to UV
     s->procUV.perceptual_relevance_y = s->procY.perceptual_relevance_y;
@@ -2239,7 +2239,14 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
         {
             int block_x = i + s->total_blocks_height -1 - block_y;
             if (block_x >= 0 && block_x < s->total_blocks_width) {
-                
+                if(is_image)
+                {
+                    lhe_advanced_decode_one_hop_per_pixel_block(&s->prec, &s->procY, &s->lheY, s->total_blocks_width, block_x, block_y);
+                    lhe_advanced_decode_one_hop_per_pixel_block(&s->prec, &s->procUV, &s->lheU, s->total_blocks_width, block_x, block_y);
+                    lhe_advanced_decode_one_hop_per_pixel_block(&s->prec, &s->procUV, &s->lheV, s->total_blocks_width, block_x, block_y);               
+                }
+                else
+                {           
                 //Luminance
                 //mlhe_adapt_downsampled_data_resolution2 (&s->procY, &s->lheY, intermediate_adapted_downsampled_data_Y_dec, 
                 //                                            adapted_downsampled_image_Y, block_x, block_y);
@@ -2252,6 +2259,7 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
                 //mlhe_adapt_downsampled_data_resolution2 (&s->procUV, &s->lheV, intermediate_adapted_downsampled_data_V_dec, adapted_downsampled_image_V,
                 //                                            block_x, block_y);
                 mlhe_decode_block_ip (&s->prec, &s->procUV, &s->lheV, s->total_blocks_width, block_x, block_y);
+                }
 
                 /*if ((&s->procY)->advanced_block[block_y][block_x].block_ttl == TTL_MAX) {
                     //Luminance
@@ -2423,9 +2431,19 @@ static int lhe_decode_frame(AVCodecContext *avctx, void *data, int *got_frame, A
         (&s->procUV)-> theoretical_block_width = (&s->procUV)->width / s->total_blocks_width;
         (&s->procUV)-> theoretical_block_height = (&s->procUV)->height / s->total_blocks_height; 
 
-        //Realloc of the buffers of the image
+        //Realloc of the buffers of the image. Repoint perceptual relevance and resset TTLs
         lhedec_free_tables(s);
         lhedec_alloc_tables(avctx, s);
+        s->procY.perceptual_relevance_x = s->procY.buffer_perceptual_relevance_x;
+        s->procY.perceptual_relevance_y = s->procY.buffer_perceptual_relevance_y;
+        for (int block_y=0; block_y<s->total_blocks_height; block_y++)      
+        {  
+            for (int block_x=0; block_x<s->total_blocks_width; block_x++) 
+            {
+                s->procY.advanced_block[block_y][block_x].block_ttl=30;
+                s->procUV.advanced_block[block_y][block_x].block_ttl=30;
+            }
+        }
 
         //Allocates frame
         av_frame_unref(s->frame);
@@ -2454,7 +2472,7 @@ static int lhe_decode_frame(AVCodecContext *avctx, void *data, int *got_frame, A
 
         lhe_advanced_read_all_file_symbols (s);
               
-        lhe_advanced_decode_symbols (s, image_size_Y, image_size_UV);     
+        lhe_advanced_decode_symbols (s, image_size_Y, image_size_UV, true);     
         
     }
 
@@ -2654,7 +2672,7 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
 
         lhe_advanced_read_all_file_symbols (s);
                 
-        lhe_advanced_decode_symbols (s, image_size_Y, image_size_UV);
+        lhe_advanced_decode_symbols (s, image_size_Y, image_size_UV, false);
     }   
     
 
