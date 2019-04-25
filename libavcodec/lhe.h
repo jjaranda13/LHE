@@ -272,6 +272,7 @@ typedef struct LheImage {
     uint8_t *buffer1;
     uint8_t *buffer2;
     uint8_t *buffer3;
+    uint8_t *double_buffer_interpol;
 } LheImage;
 
 int lhe_generate_huffman_codes(LheHuffEntry *he,  int max_huff_size);

@@ -34,6 +34,9 @@ uint8_t *intermediate_adapted_downsampled_data_Y_dec, *intermediate_adapted_down
 uint8_t *adapted_downsampled_image_Y, *adapted_downsampled_image_U, *adapted_downsampled_image_V;
 double timecount;
 
+void filter_average(uint8_t *orig, int orig_stride, uint8_t *dest,int dest_stride, int width, int height);
+void filter_epx(uint8_t *orig, int orig_stride, uint8_t *dest,int dest_stride, int width, int height);
+inline uint8_t select_epx(uint8_t *source, int pix, int stride);
 
 static void lhe_init_pixel_format (AVCodecContext *avctx, LheState *s)
 {
@@ -161,6 +164,10 @@ static int lhedec_free_tables(LheState *s)
     av_free((&s->procY)->buffer1_perceptual_relevance_x);
     av_free((&s->procY)->buffer1_perceptual_relevance_y);
 
+    av_free(s->lheY.double_buffer_interpol);
+    av_free(s->lheU.double_buffer_interpol);
+    av_free(s->lheV.double_buffer_interpol);
+
     return 0;
 }
 
@@ -271,7 +278,12 @@ static int lhedec_alloc_tables(AVCodecContext *ctx, LheState *s)
         FF_ALLOC_ARRAY_OR_GOTO(s, (&s->procY)->buffer1_perceptual_relevance_x[i], (s->total_blocks_width+1), sizeof(float), fail);
         FF_ALLOC_ARRAY_OR_GOTO(s, (&s->procY)->buffer1_perceptual_relevance_y[i], (s->total_blocks_width+1), sizeof(float), fail);
     }
-    
+
+
+    FF_ALLOC_ARRAY_OR_GOTO(s, s->lheY.double_buffer_interpol, image_size_Y, sizeof(uint8_t), fail);
+    FF_ALLOC_ARRAY_OR_GOTO(s, s->lheU.double_buffer_interpol, image_size_UV, sizeof(uint8_t), fail);
+    FF_ALLOC_ARRAY_OR_GOTO(s, s->lheV.double_buffer_interpol, image_size_UV, sizeof(uint8_t), fail);
+
     return 0;
 
     fail:
@@ -2331,16 +2343,149 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
             }
         }
     }
-    
-    for (int block_y=0; block_y<s->total_blocks_height; block_y++)
+
+    // Uncomment this two lines to enable filtering
+    //filter_epx(s->lheY.component_prediction,s->frame->linesize[0], s->lheY.double_buffer_interpol, s->procY.width, s->procY.width, s->procY.height);
+    //filter_average(s->lheY.double_buffer_interpol, s->procY.width,s->lheY.component_prediction,s->frame->linesize[0], s->procY.width, s->procY.height);
+
+}
+
+/**
+ * Applies the average filter to a color plane.
+ * 
+ * @param *orig The source color plane
+ * @param orig_stride The source stride format
+ * @param *dest The destination for the exp generated image
+ * @param dest_stride The destination stride
+ * @param width width of the source & destination
+ * @param height height of the source & destination
+ */
+void filter_average(uint8_t *orig, int orig_stride, uint8_t *dest,int dest_stride, int width, int height)
+{
+    memcpy(dest, orig, width);
+    memcpy(dest + (height-1) * dest_stride, orig + (height-1) * orig_stride, width);
+
+    for (int y = 1; y < height - 1; y++)
     {
-        for (int block_x=0; block_x<s->total_blocks_width; block_x++)
-        {  
-            lhe_advanced_filter_epxp (s, block_x, block_y);
+        dest[y * dest_stride] = orig[y * orig_stride];
+    }
+    for (int y = 1; y < height - 1; y++)
+    {
+        dest[y * dest_stride + width - 1] = orig[y * orig_stride + width - 1];
+    }
+    for (int y = 1; y < height - 1; y++)
+    {
+        for (int x = 1; x < width - 1; x++)
+        {
+            uint8_t top = orig[(y + 1) * orig_stride + x];
+            uint8_t bottom = orig[(y - 1) * orig_stride + x];
+            uint8_t left = orig[y * orig_stride + x - 1];
+            uint8_t right = orig[y * orig_stride + x + 1];
+            uint8_t center = orig[y * orig_stride + x];
+            dest[y * dest_stride + x] = (center * 6 + top + bottom + left + right) / 10;
         }
     }
 }
+/**
+ * Applies the pseudo exp to a color plane. The destination and the source
+ * must have the same resolution. The stride might be different.
+ * 
+ * @param *orig The source color plane
+ * @param orig_stride The source stride format
+ * @param *dest The destination for the exp generated image
+ * @param dest_stride The destination stride
+ * @param width width of the source & destination
+ * @param height height of the source & destination
+ */
+void filter_epx(uint8_t *orig, int orig_stride, uint8_t *dest,int dest_stride, int width, int height)
+{
+    memcpy(dest, orig, width);
+    memcpy(dest + (height-1) * dest_stride, orig + (height-1) * orig_stride, width);
 
+    for (int y = 1; y < height - 1; y++)
+        dest[y * dest_stride] = orig[y * orig_stride];
+
+    for (int y = 1; y < height - 1; y++)
+        dest[y * dest_stride + width - 1] = orig[y * orig_stride + width - 1];
+
+    for (int y = 1; y < height - 1; y++)
+    {
+        for (int x = 1; x < width - 1; x++)
+            dest[y * dest_stride + x] = select_epx(orig,y * orig_stride + x, orig_stride);
+    }
+}
+/**
+ * Select the pixel value based on the pseudo exp set of rules.
+ * 
+ * @param *source The source color plane
+ * @param pix Pixel index for which the exp filter is applied
+ * @param stride Stride of the source color plane
+ * @param image_size_Y luminance image size
+ * @param image_size_UV chrominance image size
+ */
+inline uint8_t select_epx(uint8_t *source, int pix, int stride)
+{
+    /* The pixels used to this intepolation are neighbours. The corresponding
+     * pixels are:
+     *  a b c
+     *  d e f
+     *  g h i
+     */
+    uint8_t result;
+
+    const int u1 = 11;
+    const int u2 = 16;
+    const uint8_t a = source[pix - stride - 1];
+    const uint8_t b = source[pix - stride];
+    const uint8_t c = source[pix - stride + 1];
+    const uint8_t d = source[pix - 1];
+    const uint8_t e = source[pix];
+    const uint8_t f = source[pix + 1];
+    const uint8_t g = source[pix + stride - 1];
+    const uint8_t h = source[pix + stride];
+    const uint8_t i = source[pix + stride + 1];
+
+    //Marco arriba izquierdo
+    if (dif(b, c) < u1 && dif(d, g) < u1 && dif(b, d) < u2)
+        result = (b + d)/2;
+    //Marco arriba derecho
+    else if (dif(a, b) < u1 && dif(f, i) < u1 && dif(b, f) < u2)
+        result = (b + f)/2;
+    //Marco abajo izquierdo
+    else if (dif(a, d) < u1 && dif(h, i) < u1 && dif(d, h) < u2)
+        result = (d + h)/2;
+    //Marco abajo derecho
+    else if (dif(c, f) < u1 && dif(g, h) < u1 && dif(f, h) < u2)
+        result = (f + h)/2;
+    //Diagonal h arriba izquierdo
+    else if (dif(b, c) < u1 && dif(b, d) < u2)
+        result = (b + e)/2;
+    //Diagonal v arriba izquierdo
+    else if (dif(d, g) < u1 && dif(b, d) < u2)
+        result = (e + d)/2;
+    //Diagonal h arriba derecho
+    else if (dif(a, b) < u1 && dif(b, f) < u2)
+        result = (e + b)/2;
+    //Diagonal v arriba derecho
+    else if (dif(f, i) < u1 && dif(b, f) < u2)
+        result = (e + f)/2;
+    //Diagonal h abajo izquierdo
+    else if (dif(h, i) < u1 && dif(d, h) < u2)
+        result = (e + h)/2;
+    //Diagonal v abajo izquierdo
+    else if (dif(a, d) < u1 && dif(d, h) < u2)
+        result = (d + e)/2;
+    //Diagonal h abajo derecho
+    else if (dif(g, h) < u1 && dif(f, h) < u2)
+        result = (e + h)/2;
+    //Diagonal v abajo derecho
+    else if (dif(c, f) < u1 && dif(f, h) < u2)
+        result = (f + e)/2;
+    else
+        result = e;
+
+    return result;
+}
 //==================================================================
 // DECODE FRAME
 //==================================================================
