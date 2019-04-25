@@ -35,7 +35,10 @@ uint8_t *adapted_downsampled_image_Y, *adapted_downsampled_image_U, *adapted_dow
 double timecount;
 
 void filter_average(uint8_t *orig, int orig_stride, uint8_t *dest,int dest_stride, int width, int height);
+void filter_average_selective(LheState *s, int block_x, int block_y);
+inline uint8_t select_average(uint8_t *source, int pix, int stride);
 void filter_epx(uint8_t *orig, int orig_stride, uint8_t *dest,int dest_stride, int width, int height);
+void filter_epx_selective(LheState *s, int block_x, int block_y);
 inline uint8_t select_epx(uint8_t *source, int pix, int stride);
 
 static void lhe_init_pixel_format (AVCodecContext *avctx, LheState *s)
@@ -2345,9 +2348,81 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
     }
 
     // Uncomment this two lines to enable filtering
-    //filter_epx(s->lheY.component_prediction,s->frame->linesize[0], s->lheY.double_buffer_interpol, s->procY.width, s->procY.width, s->procY.height);
-    //filter_average(s->lheY.double_buffer_interpol, s->procY.width,s->lheY.component_prediction,s->frame->linesize[0], s->procY.width, s->procY.height);
+    /*
+    filter_epx(s->lheY.component_prediction,s->frame->linesize[0], s->lheY.double_buffer_interpol, s->procY.width, s->procY.width, s->procY.height);
+    filter_average(s->lheY.double_buffer_interpol, s->procY.width,s->lheY.component_prediction,s->frame->linesize[0], s->procY.width, s->procY.height);
+    */
 
+    // Uncomment this two loops to enable filtering depending on PPP
+    /*
+    for (int block_y=0; block_y < s->total_blocks_height; block_y++)
+    {
+        for (int block_x = 0; block_x < s->total_blocks_width; block_x++)
+            filter_epx_selective(s, block_x, block_y);
+    }
+
+    for (int block_y=0; block_y < s->total_blocks_height; block_y++)
+    {
+        for (int block_x = 0; block_x < s->total_blocks_width; block_x++)
+            filter_average_selective(s, block_x, block_y);
+    }
+    */
+
+}
+
+/**
+ * Applies the average filter to a color plane.Selective with a threshold.
+ */
+void filter_average_selective(LheState *s, int block_x, int block_y)
+{
+    float ppp_x, ppp_y, grx_pppx, grx_pppy;
+    LheProcessing *proc = (&s->procY);
+
+    const uint32_t block_height = proc->basic_block[block_y][block_x].block_height;
+    const uint32_t block_width = proc->basic_block[block_y][block_x].block_width;
+    const uint32_t xini = proc->basic_block[block_y][block_x].x_ini;
+    const uint32_t yini = proc->basic_block[block_y][block_x].y_ini;
+    const uint32_t yfin = proc->basic_block[block_y][block_x].y_fin;
+    const uint32_t xfin = proc->basic_block[block_y][block_x].x_fin;
+
+    float ppp_ax = proc->advanced_block[block_y][block_x].ppp_x[TOP_LEFT_CORNER];
+    float ppp_bx = proc->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER];
+    float ppp_ay = proc->advanced_block[block_y][block_x].ppp_y[TOP_LEFT_CORNER];
+    float ppp_by = proc->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER];
+
+    //gradient PPPx side a
+    const float gry_pppax = (proc->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER] - proc->advanced_block[block_y][block_x].ppp_x[TOP_LEFT_CORNER]) / (block_height - 1.0);
+    //gradient PPPx side b
+    const float gry_pppbx = (proc->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER] - proc->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]) / (block_height - 1.0);
+    //gradient PPPx side a
+    const float gry_pppay = (proc->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER] - proc->advanced_block[block_y][block_x].ppp_y[TOP_LEFT_CORNER]) / (block_height - 1.0);
+    //gradient PPPx side b
+    const float gry_pppby = (proc->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] - proc->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]) / (block_height - 1.0);
+
+    const float ppp_threshold = 1.4;
+
+    for (int y = yini; y < yfin; y++)
+    {
+        ppp_x = ppp_ax;
+        ppp_y = ppp_ay;
+        grx_pppx = (ppp_bx - ppp_ax) / (block_width - 1);
+        grx_pppy = (ppp_by - ppp_ay) / (block_width - 1);
+
+        for (int x = xini; x < xfin; x++)
+        {
+            if (ppp_x > ppp_threshold && ppp_y > ppp_threshold)
+                s->lheY.component_prediction[y * s->frame->linesize[0] + x] = select_average(s->lheY.double_buffer_interpol, y * s->procY.width + x, s->procY.width);
+            else
+                s->lheY.component_prediction[y * s->frame->linesize[0] + x] = s->lheY.double_buffer_interpol[y * s->procY.width + x];
+
+            ppp_x += grx_pppx;
+            ppp_y += grx_pppy;
+        }
+        ppp_ax += gry_pppax;
+        ppp_bx += gry_pppbx;
+        ppp_ay += gry_pppay;
+        ppp_by += gry_pppby;
+    }
 }
 
 /**
@@ -2360,32 +2435,89 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
  * @param width width of the source & destination
  * @param height height of the source & destination
  */
-void filter_average(uint8_t *orig, int orig_stride, uint8_t *dest,int dest_stride, int width, int height)
+void filter_average(uint8_t *orig, int orig_stride, uint8_t *dest, int dest_stride, int width, int height)
 {
     memcpy(dest, orig, width);
-    memcpy(dest + (height-1) * dest_stride, orig + (height-1) * orig_stride, width);
+    memcpy(dest + (height - 1) * dest_stride, orig + (height - 1) * orig_stride, width);
+
+    for (int y = 1; y < height - 1; y++)
+        dest[y * dest_stride] = orig[y * orig_stride];
+
+    for (int y = 1; y < height - 1; y++)
+        dest[y * dest_stride + width - 1] = orig[y * orig_stride + width - 1];
 
     for (int y = 1; y < height - 1; y++)
     {
-        dest[y * dest_stride] = orig[y * orig_stride];
-    }
-    for (int y = 1; y < height - 1; y++)
-    {
-        dest[y * dest_stride + width - 1] = orig[y * orig_stride + width - 1];
-    }
-    for (int y = 1; y < height - 1; y++)
-    {
         for (int x = 1; x < width - 1; x++)
-        {
-            uint8_t top = orig[(y + 1) * orig_stride + x];
-            uint8_t bottom = orig[(y - 1) * orig_stride + x];
-            uint8_t left = orig[y * orig_stride + x - 1];
-            uint8_t right = orig[y * orig_stride + x + 1];
-            uint8_t center = orig[y * orig_stride + x];
-            dest[y * dest_stride + x] = (center * 6 + top + bottom + left + right) / 10;
-        }
+            dest[y * dest_stride + x] = select_average(orig, y * orig_stride + x, orig_stride);
     }
 }
+
+inline uint8_t select_average(uint8_t *source, int pix, int stride)
+{
+    uint8_t top = source[pix + stride];
+    uint8_t bottom = source[pix - stride];
+    uint8_t left = source[pix - 1];
+    uint8_t right = source[pix + 1];
+    uint8_t center = source[pix];
+    return (center * 6 + top + bottom + left + right) / 10;
+}
+
+/**
+ * Applies the epx filter to a color plane.Selective with a threshold.
+ * 
+ */
+void filter_epx_selective(LheState *s, int block_x, int block_y)
+{
+    float ppp_x, ppp_y, grx_pppx, grx_pppy;
+    LheProcessing *proc = (&s->procY);
+
+    const uint32_t block_height = proc->basic_block[block_y][block_x].block_height;
+    const uint32_t block_width = proc->basic_block[block_y][block_x].block_width;
+    const uint32_t xini = proc->basic_block[block_y][block_x].x_ini;
+    const uint32_t yini = proc->basic_block[block_y][block_x].y_ini;
+    const uint32_t yfin = proc->basic_block[block_y][block_x].y_fin;
+    const uint32_t xfin = proc->basic_block[block_y][block_x].x_fin;
+
+    float ppp_ax = proc->advanced_block[block_y][block_x].ppp_x[TOP_LEFT_CORNER];
+    float ppp_bx = proc->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER];
+    float ppp_ay = proc->advanced_block[block_y][block_x].ppp_y[TOP_LEFT_CORNER];
+    float ppp_by = proc->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER];
+
+    //gradient PPPx side a
+    const float gry_pppax = (proc->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER] - proc->advanced_block[block_y][block_x].ppp_x[TOP_LEFT_CORNER]) / (block_height - 1.0);
+    //gradient PPPx side b
+    const float gry_pppbx = (proc->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER] - proc->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER]) / (block_height - 1.0);
+    //gradient PPPx side a
+    const float gry_pppay = (proc->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER] - proc->advanced_block[block_y][block_x].ppp_y[TOP_LEFT_CORNER]) / (block_height - 1.0);
+    //gradient PPPx side b
+    const float gry_pppby = (proc->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] - proc->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER]) / (block_height - 1.0);
+
+    const float ppp_threshold = 1.4;
+
+    for (int y = yini; y < yfin; y++)
+    {
+        ppp_x = ppp_ax;
+        ppp_y = ppp_ay;
+        grx_pppx = (ppp_bx - ppp_ax) / (block_width - 1);
+        grx_pppy = (ppp_by - ppp_ay) / (block_width - 1);
+
+        for (int x = xini; x < xfin; x++)
+        {
+            if (ppp_x > ppp_threshold && ppp_y > ppp_threshold)
+                s->lheY.double_buffer_interpol[y * s->procY.width + x] = select_epx(s->lheY.component_prediction, y * s->frame->linesize[0] + x, s->frame->linesize[0]);
+            else
+                s->lheY.double_buffer_interpol[y * s->procY.width + x] = s->lheY.component_prediction[y * s->frame->linesize[0] + x];
+            ppp_x += grx_pppx;
+            ppp_y += grx_pppy;
+        }
+        ppp_ax += gry_pppax;
+        ppp_bx += gry_pppbx;
+        ppp_ay += gry_pppay;
+        ppp_by += gry_pppby;
+    }
+}
+
 /**
  * Applies the pseudo exp to a color plane. The destination and the source
  * must have the same resolution. The stride might be different.
@@ -2397,10 +2529,10 @@ void filter_average(uint8_t *orig, int orig_stride, uint8_t *dest,int dest_strid
  * @param width width of the source & destination
  * @param height height of the source & destination
  */
-void filter_epx(uint8_t *orig, int orig_stride, uint8_t *dest,int dest_stride, int width, int height)
+void filter_epx(uint8_t *orig, int orig_stride, uint8_t *dest, int dest_stride, int width, int height)
 {
     memcpy(dest, orig, width);
-    memcpy(dest + (height-1) * dest_stride, orig + (height-1) * orig_stride, width);
+    memcpy(dest + (height - 1) * dest_stride, orig + (height - 1) * orig_stride, width);
 
     for (int y = 1; y < height - 1; y++)
         dest[y * dest_stride] = orig[y * orig_stride];
@@ -2411,7 +2543,7 @@ void filter_epx(uint8_t *orig, int orig_stride, uint8_t *dest,int dest_stride, i
     for (int y = 1; y < height - 1; y++)
     {
         for (int x = 1; x < width - 1; x++)
-            dest[y * dest_stride + x] = select_epx(orig,y * orig_stride + x, orig_stride);
+            dest[y * dest_stride + x] = select_epx(orig, y * orig_stride + x, orig_stride);
     }
 }
 /**
@@ -2447,40 +2579,40 @@ inline uint8_t select_epx(uint8_t *source, int pix, int stride)
 
     //Marco arriba izquierdo
     if (dif(b, c) < u1 && dif(d, g) < u1 && dif(b, d) < u2)
-        result = (b + d)/2;
+        result = (b + d) / 2;
     //Marco arriba derecho
     else if (dif(a, b) < u1 && dif(f, i) < u1 && dif(b, f) < u2)
-        result = (b + f)/2;
+        result = (b + f) / 2;
     //Marco abajo izquierdo
     else if (dif(a, d) < u1 && dif(h, i) < u1 && dif(d, h) < u2)
-        result = (d + h)/2;
+        result = (d + h) / 2;
     //Marco abajo derecho
     else if (dif(c, f) < u1 && dif(g, h) < u1 && dif(f, h) < u2)
-        result = (f + h)/2;
+        result = (f + h) / 2;
     //Diagonal h arriba izquierdo
     else if (dif(b, c) < u1 && dif(b, d) < u2)
-        result = (b + e)/2;
+        result = (b + e) / 2;
     //Diagonal v arriba izquierdo
     else if (dif(d, g) < u1 && dif(b, d) < u2)
-        result = (e + d)/2;
+        result = (e + d) / 2;
     //Diagonal h arriba derecho
     else if (dif(a, b) < u1 && dif(b, f) < u2)
-        result = (e + b)/2;
+        result = (e + b) / 2;
     //Diagonal v arriba derecho
     else if (dif(f, i) < u1 && dif(b, f) < u2)
-        result = (e + f)/2;
+        result = (e + f) / 2;
     //Diagonal h abajo izquierdo
     else if (dif(h, i) < u1 && dif(d, h) < u2)
-        result = (e + h)/2;
+        result = (e + h) / 2;
     //Diagonal v abajo izquierdo
     else if (dif(a, d) < u1 && dif(d, h) < u2)
-        result = (d + e)/2;
+        result = (d + e) / 2;
     //Diagonal h abajo derecho
     else if (dif(g, h) < u1 && dif(f, h) < u2)
-        result = (e + h)/2;
+        result = (e + h) / 2;
     //Diagonal v abajo derecho
     else if (dif(c, f) < u1 && dif(f, h) < u2)
-        result = (f + e)/2;
+        result = (f + e) / 2;
     else
         result = e;
 
@@ -2496,7 +2628,7 @@ inline uint8_t select_epx(uint8_t *source, int pix, int stride)
  * @param *data data from file
  * @param *got_frame indicates frame is ready
  * @param *avpkt AV packet
- */ 
+ */
 static int lhe_decode_frame(AVCodecContext *avctx, void *data, int *got_frame, AVPacket *avpkt)
 {    
 
