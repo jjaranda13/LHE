@@ -457,7 +457,7 @@ static inline void add_hop0(LheProcessing *proc, uint8_t *symbols, int *pix, int
     }
 }
 
-static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, uint8_t *symbols, int block_y_ini, int block_y_fin, int horizontal_blocks, int lhe_mode, int channel) {
+static int lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, uint8_t *symbols, int block_y_ini, int block_y_fin, int horizontal_blocks, int lhe_mode, int channel) {
 
     int xini, yini, xfin_downsampled, yfin_downsampled, pix, dif_pix;
 
@@ -470,8 +470,6 @@ static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, u
 
     int block_x = block_y_ini*horizontal_blocks;
     int inc_x = 1;
- 
-    uint8_t *hops = av_calloc(proc->width*proc->height, sizeof(uint8_t));
 
     struct timeval before , after;
 
@@ -479,12 +477,27 @@ static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, u
     else if (channel == 1) {num_hops = proc->num_hopsU;}
     else if (channel == 2) {num_hops = proc->num_hopsV;}
 
+    uint8_t *image_hops = av_calloc(proc->width*proc->height, sizeof(uint8_t));
+
     gettimeofday(&before , NULL);
 
     while (true){
         //av_log(NULL, AV_LOG_INFO, "hops_counter: %d\n", hops_counter);
+
+        /*if (s->gb.buffer_end < (s->gb.buffer + s->gb.index/8)) {
+            av_log(NULL, AV_LOG_WARNING, "Antes del free de hops, puntero image_hops: %ld\n", &image_hops);
+            if (&image_hops != NULL)
+                av_free(image_hops);
+            av_log(NULL, AV_LOG_WARNING, "Posible packet loss\n");
+            return 0;  
+        } */
+
         if (hops_counter == num_hops) break;
-        data = show_bits(&s->gb, 8);
+        
+        //if (get_bits_left(&s->gb) >= 8)
+            data = show_bits(&s->gb, 8);
+        //else
+        //    data = show_bits(&s->gb, get_bits_left(&s->gb));
         switch (mode){
             case HUFFMAN:
                 if (ahorro == 0) {
@@ -556,35 +569,67 @@ static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, u
                 if (hop == HOP_0) h0_counter++;
                 else h0_counter = 0;
                 if (h0_counter == condition_length) mode = RLC1;
-                hops[hops_counter] = hop;
+                image_hops[hops_counter] = hop;
                 hops_counter++;
             break;
             case RLC1:
+                if (get_bits_left(&s->gb) < 1) {
+                        av_free(image_hops);
+                        return 0;
+                    }
                 data = get_bits(&s->gb, 1);
                 if (data == 0) {
+                    if (get_bits_left(&s->gb) < rlc_length) {
+                        av_free(image_hops);
+                        return 0;
+                    }
                     rlc_number = get_bits(&s->gb, rlc_length);
-                    add_hop0(proc, hops, &hops_counter, rlc_number);
+                    if (hops_counter + rlc_number > num_hops) {
+                        av_free(image_hops);
+                        return 0;
+                    }
+                    add_hop0(proc, image_hops, &hops_counter, rlc_number);
                     h0_counter = 0;
                     mode = HUFFMAN;
                     ahorro=1;
 
                 } else {
-                    add_hop0(proc, hops, &hops_counter, 15);
+                    if (hops_counter + 15 > num_hops) {
+                        av_free(image_hops);
+                        return 0;
+                    }
+                    add_hop0(proc, image_hops, &hops_counter, 15);
                     rlc_length += 1;
                     mode = RLC2;
                 }
             break;
             case RLC2:
+                if (get_bits_left(&s->gb) < 1) {
+                        av_free(image_hops);
+                        return 0;
+                    }
                 data = get_bits(&s->gb, 1);
                 if (data == 0) {
+                    if (get_bits_left(&s->gb) < rlc_length) {
+                        av_free(image_hops);
+                        return 0;
+                    }
                     rlc_number = get_bits(&s->gb, rlc_length);
-                    add_hop0(proc, hops, &hops_counter, rlc_number);
+                    if (hops_counter + rlc_number > num_hops) {
+                        av_free(image_hops);
+                        return 0;
+                    }
+                    add_hop0(proc, image_hops, &hops_counter, rlc_number);
                     rlc_length = 4;
                     h0_counter = 0;
                     mode = HUFFMAN;
                     ahorro=1;
                 } else {
-                    add_hop0(proc, hops, &hops_counter, 31);
+                    if (hops_counter + 31 > num_hops) {
+                        av_free(image_hops);
+                        return 0;
+                    }
+                    add_hop0(proc, image_hops, &hops_counter, 31);
                 }
             break;
         }
@@ -620,7 +665,7 @@ static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, u
 
             for (int y = yini; y < yfin_downsampled; y++) {
                 for (int x = xini; x < xfin_downsampled; x++) {
-                    symbols[pix] = hops[a];
+                    symbols[pix] = image_hops[a];
                     a++;
                     pix++;
                 }
@@ -636,7 +681,8 @@ static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, u
     timecount = time_diff(before , after);
     //av_log(NULL, AV_LOG_WARNING, "Tiempo en procesar los hops: %d\n", timecount);
 
-    av_free(hops);
+    av_free(image_hops);
+    return 1;
 }
 
 
@@ -652,10 +698,11 @@ static void lhe_advanced_read_file_symbols3 (LheState *s, LheProcessing *proc, u
  * @param *he_Y Luminance Huffman entry, Huffman parameters
  * @param *he_UV Chrominance Huffman entry, Huffman parameters
  */
-static void lhe_advanced_read_all_file_symbols (LheState *s) 
+static int lhe_advanced_read_all_file_symbols (LheState *s) 
 {
     LheProcessing *procY, *procUV;
     LheImage *lheY, *lheU, *lheV;
+    int ret;
     
     procY = &s->procY;
     procUV = &s->procUV;
@@ -664,10 +711,20 @@ static void lhe_advanced_read_all_file_symbols (LheState *s)
     lheU = &s->lheU;
     lheV = &s->lheV;
     
-    lhe_advanced_read_file_symbols3 (s, procY, lheY->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 0);
-    lhe_advanced_read_file_symbols3 (s, procUV, lheU->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 1);
-    lhe_advanced_read_file_symbols3 (s, procUV, lheV->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 2);
+    ret = lhe_advanced_read_file_symbols3 (s, procY, lheY->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 0);
+    if (ret == 0){
+        return 0;  
+    } 
+    ret = lhe_advanced_read_file_symbols3 (s, procUV, lheU->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 1);
+    if (ret == 0){
+        return 0;  
+    } 
+    ret = lhe_advanced_read_file_symbols3 (s, procUV, lheV->hops, 0, s->total_blocks_height, HORIZONTAL_BLOCKS, ADVANCED_LHE, 2);
+    if (ret == 0){
+        return 0;  
+    } 
 
+    return 1;
 }
 
 /**
@@ -728,6 +785,9 @@ static void lhe_advanced_read_perceptual_relevance_interval (LheState *s, LheHuf
     {
         for (int block_x=0; block_x<s->total_blocks_width+1;) 
         { 
+            if (s->gb.buffer_end < (s->gb.buffer + s->gb.index/8 + 4)) {
+                return 0;  
+            } 
             //Reads from file
             huffman_symbol = (huffman_symbol<<1) | get_bits(&s->gb, 1);
             count_bits++;
@@ -2894,10 +2954,16 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
     struct timeval before , after;
 
     gettimeofday(&before , NULL);
-    
+
+    if (avpkt == NULL) return 0;
+
     init_get_bits(&s->gb, lhe_data, avpkt->size * 8);
-    
-    s->lhe_mode = get_bits(&s->gb, LHE_MODE_SIZE_BITS); 
+
+    if (s->gb.buffer_end < (s->gb.buffer + (s->gb.index/8)+100)) {
+            return 0;  
+    }
+
+    s->lhe_mode = get_bits(&s->gb, LHE_MODE_SIZE_BITS);
         
     if (s->lhe_mode == ADVANCED_LHE)
     {   
@@ -2907,10 +2973,8 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
         //(&s->procY)->height = get_bits(&s->gb, 32);
         //(&s->procUV)->width = ((&s->procY)->width - 1)/s->chroma_factor_width+1;
         //(&s->procUV)->height = ((&s->procY)->height - 1)/s->chroma_factor_height+1;
-
         image_size_Y =  (&s->procY)->width * (&s->procY)->height;
         image_size_UV = (&s->procUV)->width * (&s->procUV)->height;
-
         //avctx->width = (&s->procY)->width;
         //avctx->height = (&s->procY)->height;
         
@@ -2918,12 +2982,17 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
         av_frame_unref(s->frame);
         if ((ret = ff_get_buffer(avctx, s->frame, 0)) < 0)
             return ret;
-        
+
         //Pointers to different color components
         (&s->lheY)->component_prediction = s->frame->data[0];
         (&s->lheU)->component_prediction  = s->frame->data[1];
         (&s->lheV)->component_prediction  = s->frame->data[2];
-        
+
+
+        /*if (s->gb.buffer_end < (s->gb.buffer + (s->gb.index/8)+3)) {
+            return 0;  
+        }*/
+
         (&s->lheY)->first_color_block[0] = get_bits(&s->gb, FIRST_COLOR_SIZE_BITS);
         (&s->lheU)->first_color_block[0] = get_bits(&s->gb, FIRST_COLOR_SIZE_BITS);
         (&s->lheV)->first_color_block[0] = get_bits(&s->gb, FIRST_COLOR_SIZE_BITS); 
@@ -2947,10 +3016,14 @@ static int mlhe_decode_video(AVCodecContext *avctx, void *data, int *got_frame, 
 
         mlhe_block_decission(s);
 
-        lhe_advanced_read_all_file_symbols (s);
+        ret = lhe_advanced_read_all_file_symbols (s);
+        if (ret == 0) return 0;
+        if (s->gb.buffer_end != s->gb.buffer + (s->gb.index/8) + 1) return 0;
                 
         lhe_advanced_decode_symbols (s, image_size_Y, image_size_UV, false);
-    }   
+    }   else {
+        return 0;
+    }
     
 
     
