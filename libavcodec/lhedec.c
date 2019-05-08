@@ -2470,7 +2470,7 @@ void filter_average_selective(LheState *s, int block_x, int block_y)
 
         for (int x = xini; x < xfin; x++)
         {
-            if (ppp_x > ppp_threshold && ppp_y > ppp_threshold)
+            if (ppp_x > ppp_threshold && ppp_y > ppp_threshold && x> xini && x < xfin -1 && y> yini && y< yfin -1)
                 s->lheY.component_prediction[y * s->frame->linesize[0] + x] = select_average(s->lheY.double_buffer_interpol, y * s->procY.width + x, s->procY.width);
             else
                 s->lheY.component_prediction[y * s->frame->linesize[0] + x] = s->lheY.double_buffer_interpol[y * s->procY.width + x];
@@ -2564,7 +2564,7 @@ void filter_epx_selective(LheState *s, int block_x, int block_y)
 
         for (int x = xini; x < xfin; x++)
         {
-            if (ppp_x > ppp_threshold && ppp_y > ppp_threshold)
+            if (ppp_x > ppp_threshold && ppp_y > ppp_threshold && x> xini && x < xfin -1 && y> yini && y< yfin -1)
                 s->lheY.double_buffer_interpol[y * s->procY.width + x] = select_epx(s->lheY.component_prediction, y * s->frame->linesize[0] + x, s->frame->linesize[0]);
             else
                 s->lheY.double_buffer_interpol[y * s->procY.width + x] = s->lheY.component_prediction[y * s->frame->linesize[0] + x];
