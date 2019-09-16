@@ -899,6 +899,7 @@ static void lhe_advanced_read_mesh (LheState *s, LheHuffEntry *he_mesh, float pp
                 procUV->num_hopsV += num_hopsUV;
             }*/
 
+
         }
     }
 }
@@ -1791,12 +1792,35 @@ static void mlhe_decode_delta_frame (LheState *s, uint32_t image_size_Y, uint32_
             mlhe_decode_delta (&s->prec, &s->procY, &s->lheY, delta_prediction_Y_dec, 
                                adapted_downsampled_image_Y, s->total_blocks_width, block_x, block_y);
 
+
+
+
+            lhe_advanced_vertical_adaptative_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
+                                                                                   block_x, block_y, s->total_blocks_height, true); 
+
+            lhe_advanced_horizontal_adaptative_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
+                                                     s->frame->linesize[0], block_x, block_y, true);
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
             
-            lhe_advanced_vertical_nearest_neighbour_interpolation (&s->procY, &s->lheY, intermediate_interpolated_Y, 
-                                                                   block_x, block_y);
+            //lhe_advanced_vertical_nearest_neighbour_interpolation (&s->procY, &s->lheY, intermediate_interpolated_Y, 
+            //                                                       block_x, block_y);
                       
-            lhe_advanced_horizontal_nearest_neighbour_interpolation (&s->procY, &s->lheY, intermediate_interpolated_Y, 
-                                                                     s->frame->linesize[0], block_x, block_y);
+            //lhe_advanced_horizontal_nearest_neighbour_interpolation (&s->procY, &s->lheY, intermediate_interpolated_Y, 
+            //                                                         s->frame->linesize[0], block_x, block_y);
 
             //Chrominance U                    
             mlhe_adapt_downsampled_data_resolution2 (&s->procUV, &s->lheU,
@@ -1806,11 +1830,20 @@ static void mlhe_decode_delta_frame (LheState *s, uint32_t image_size_Y, uint32_
             mlhe_decode_delta (&s->prec, &s->procUV, &s->lheU, delta_prediction_U_dec, 
                                adapted_downsampled_image_U, s->total_blocks_width, block_x, block_y);
             
-            lhe_advanced_vertical_nearest_neighbour_interpolation (&s->procUV, &s->lheU, intermediate_interpolated_U, 
-                                                                   block_x, block_y);         
+            //lhe_advanced_vertical_nearest_neighbour_interpolation (&s->procUV, &s->lheU, intermediate_interpolated_U, 
+            //                                                       block_x, block_y);         
             
-            lhe_advanced_horizontal_nearest_neighbour_interpolation (&s->procUV, &s->lheU, intermediate_interpolated_U, 
-                                                                     s->frame->linesize[1], block_x, block_y);
+            //lhe_advanced_horizontal_nearest_neighbour_interpolation (&s->procUV, &s->lheU, intermediate_interpolated_U, 
+            //                                                         s->frame->linesize[1], block_x, block_y);
+
+
+
+
+            lhe_advanced_vertical_adaptative_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
+                                                                               block_x, block_y, s->total_blocks_height, true); 
+
+            lhe_advanced_horizontal_adaptative_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
+                                                     s->frame->linesize[1], block_x, block_y, true);
             //Chrominance V            
             mlhe_adapt_downsampled_data_resolution2 (&s->procUV, &s->lheV, 
                                                     intermediate_adapted_downsampled_data_V_dec, adapted_downsampled_image_V,
@@ -1818,13 +1851,22 @@ static void mlhe_decode_delta_frame (LheState *s, uint32_t image_size_Y, uint32_
             
             mlhe_decode_delta (&s->prec, &s->procUV, &s->lheV, delta_prediction_V_dec, 
                                adapted_downsampled_image_V, s->total_blocks_width, block_x, block_y);
+
+
+            lhe_advanced_vertical_adaptative_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
+                                                                               block_x, block_y, s->total_blocks_height, true); 
+
+            lhe_advanced_horizontal_adaptative_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
+                                                     s->frame->linesize[2], block_x, block_y, true);
+
+
              
-            lhe_advanced_vertical_nearest_neighbour_interpolation (&s->procUV, &s->lheV, intermediate_interpolated_V, 
-                                                                   block_x, block_y);
+            //lhe_advanced_vertical_nearest_neighbour_interpolation (&s->procUV, &s->lheV, intermediate_interpolated_V, 
+            //                                                       block_x, block_y);
             
             
-            lhe_advanced_horizontal_nearest_neighbour_interpolation (&s->procUV, &s->lheV, intermediate_interpolated_V, 
-                                                                     s->frame->linesize[2], block_x, block_y);    
+            //lhe_advanced_horizontal_nearest_neighbour_interpolation (&s->procUV, &s->lheV, intermediate_interpolated_V, 
+            //                                                         s->frame->linesize[2], block_x, block_y);    
         }
     }     
 }
@@ -2375,14 +2417,26 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
             int block_x = i + s->total_blocks_height -1 - block_y;
             if (block_x >= 0 && block_x < s->total_blocks_width) {
                 //Luminance
-                lhe_advanced_vertical_nearest_neighbour_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
-                                                                      block_x, block_y);//, s->total_blocks_height, false);
+                //lhe_advanced_vertical_nearest_neighbour_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
+                //                                                      block_x, block_y);//, s->total_blocks_height, false);
+
                 //Chrominance U
-                lhe_advanced_vertical_nearest_neighbour_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
-                                                                      block_x, block_y);//, s->total_blocks_height);//,true);
+                //lhe_advanced_vertical_nearest_neighbour_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
+                //                                                      block_x, block_y);//, s->total_blocks_height);//,true);
                 //Chrominance V
-                lhe_advanced_vertical_nearest_neighbour_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
-                                                                      block_x, block_y);//, s->total_blocks_height);//,true);
+                //lhe_advanced_vertical_nearest_neighbour_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
+                //                                                      block_x, block_y);//, s->total_blocks_height);//,true);
+
+
+                lhe_advanced_vertical_adaptative_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
+                                                                      block_x, block_y, s->total_blocks_height, true);
+
+                //Chrominance U
+                lhe_advanced_vertical_adaptative_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
+                                                                      block_x, block_y, s->total_blocks_height,true);
+                //Chrominance V
+                lhe_advanced_vertical_adaptative_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
+                                                                      block_x, block_y, s->total_blocks_height,true);
             }
         }
     }
@@ -2395,14 +2449,28 @@ static void lhe_advanced_decode_symbols(LheState *s, uint32_t image_size_Y, uint
             if (block_x >= 0 && block_x < s->total_blocks_width) {
                 //Luminance
 
-                lhe_advanced_horizontal_nearest_neighbour_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
-                                                                        s->frame->linesize[0], block_x, block_y);//,false);
+                //lhe_advanced_horizontal_nearest_neighbour_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
+                //                                                        s->frame->linesize[0], block_x, block_y);//,false);
                 //Chrominance U
-                lhe_advanced_horizontal_nearest_neighbour_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
-                                                                        s->frame->linesize[1], block_x, block_y);//,true);
+                //lhe_advanced_horizontal_nearest_neighbour_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
+                //                                                        s->frame->linesize[1], block_x, block_y);//,true);
                 //Chrominance V
-                lhe_advanced_horizontal_nearest_neighbour_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
-                                                                        s->frame->linesize[2], block_x, block_y);//,true);
+                //lhe_advanced_horizontal_nearest_neighbour_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
+                //                                                        s->frame->linesize[2], block_x, block_y);//,true);
+
+
+
+                //Luminance
+
+                lhe_advanced_horizontal_adaptative_interpolation(&s->procY, &s->lheY, intermediate_interpolated_Y,
+                                                                        s->frame->linesize[0], block_x, block_y,true);
+                //Chrominance U
+                lhe_advanced_horizontal_adaptative_interpolation(&s->procUV, &s->lheU, intermediate_interpolated_U,
+                                                                        s->frame->linesize[1], block_x, block_y,true);
+                //Chrominance V
+                lhe_advanced_horizontal_adaptative_interpolation(&s->procUV, &s->lheV, intermediate_interpolated_V,
+                                                                        s->frame->linesize[2], block_x, block_y,true);
+
             }
         }
     }

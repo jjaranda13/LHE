@@ -83,9 +83,9 @@ static const uint8_t lhe_sig[3] = "LHE";
 //Perceptual Relevance Params
 #define PR_LUM_DIV 4
 #define PR_HMAX 4.0
-#define PR_MIN 0.2
+#define PR_MIN 0.125
 #define PR_MAX 0.5
-#define PR_DIF 0.3 //PR_MAX-PR_MIN
+#define PR_DIF PR_MAX-PR_MIN
 #define PR_QUANT_0 0
 #define PR_QUANT_1 0.125
 #define PR_QUANT_2 0.25

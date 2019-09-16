@@ -784,6 +784,263 @@ static void lhe_advanced_horizontal_nearest_neighbour_interpolation (LheProcessi
     }//y 
 }
 
+static void lhe_advanced_vertical_adaptative_interpolation(LheProcessing *proc, 
+                                            LheImage *lhe, uint8_t *intermediate_interpolated_image,
+                                            int block_x, int block_y, int vertical_blocks, bool only_bilineal)
+{
+    uint32_t downsampled_y_side, downsampled_x_side;
+    float gradient, gradient_0, gradient_1, gradient_pr, gradient_0_pr, 
+        gradient_1_pr, ppp_y, ppp_0, ppp_1, ppp_2, ppp_3, pr_y, pr_0, pr_1,
+        pr_2, pr_3, yfin_interpolated_float, x_side_relation,
+        past_x_side_relation;
+    uint32_t xini, xfin_downsampled, yfin, yini, yprev_interpolated, 
+        yfin_interpolated, yfin_downsampled, half;
+    uint8_t next_block_downsampled_x_side, past_block_downsampled_x_side;
+    bool last_block, first_block;
+
+    downsampled_y_side = proc->advanced_block[block_y][block_x].downsampled_y_side;
+    downsampled_x_side = proc->advanced_block[block_y][block_x].downsampled_x_side;
+    xini = proc->basic_block[block_y][block_x].x_ini;
+    xfin_downsampled = proc->advanced_block[block_y][block_x].x_fin_downsampled;
+    yini = proc->basic_block[block_y][block_x].y_ini;
+    yfin_downsampled = proc->advanced_block[block_y][block_x].y_fin_downsampled;
+    yfin = proc->basic_block[block_y][block_x].y_fin;
+
+    ppp_0 = proc->advanced_block[block_y][block_x].ppp_y[TOP_LEFT_CORNER];
+    ppp_1 = proc->advanced_block[block_y][block_x].ppp_y[TOP_RIGHT_CORNER];
+    ppp_2 = proc->advanced_block[block_y][block_x].ppp_y[BOT_LEFT_CORNER];
+    ppp_3 = proc->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER];
+
+    pr_0 = proc->perceptual_relevance_y[block_y][block_x];
+    pr_1 = proc->perceptual_relevance_y[block_y][block_x + 1];
+    pr_2 = proc->perceptual_relevance_y[block_y + 1][block_x];
+    pr_3 = proc->perceptual_relevance_y[block_y + 1][block_x + 1];
+    if (block_y == vertical_blocks - 1)
+    {
+        last_block = true;
+    }
+    else
+    {
+        last_block = false;
+        next_block_downsampled_x_side = proc->advanced_block[block_y + 1][block_x].downsampled_x_side;
+        x_side_relation = (next_block_downsampled_x_side - 1) / (float)(downsampled_x_side - 1);
+    }
+    if(block_y == 0){
+        first_block = true;
+    }
+    else
+    {
+        first_block = false;
+        past_block_downsampled_x_side = proc->advanced_block[block_y-1][block_x].downsampled_x_side;
+        past_x_side_relation = (past_block_downsampled_x_side-1)/(float)(downsampled_x_side-1);
+    }
+
+    //gradient PPPy side c
+    gradient_0 = (ppp_1 - ppp_0) / (downsampled_x_side - 1.0);
+    gradient_0_pr = (pr_1 - pr_0) / (downsampled_x_side - 1.0);
+    //gradient PPPy side d
+    gradient_1 = (ppp_3 - ppp_2) / (downsampled_x_side - 1.0);
+    gradient_1_pr = (pr_3 - pr_2) / (downsampled_x_side - 1.0);
+
+    for (int x = xini; x < xfin_downsampled; x++)
+    {
+        gradient = (ppp_2 - ppp_0) / (downsampled_y_side - 1.0);
+        gradient_pr = (pr_2 - pr_0) / (downsampled_y_side - 1.0);
+        ppp_y = ppp_0;
+        pr_y = pr_0;
+
+        //Interpolated y coordinates
+        yprev_interpolated = yini;
+        yfin_interpolated_float = yini + ppp_y;
+
+        // bucle for horizontal scanline
+        // scans the downsampled image, pixel by pixel
+        for (int y_sc = yini; y_sc < yfin_downsampled; y_sc++)
+        {
+            yfin_interpolated = yfin_interpolated_float + 0.5;
+
+            for (int i = yprev_interpolated; i < yfin_interpolated; i++)
+            {
+                if (pr_y < 0.251 || only_bilineal) // Bilinear
+                {
+                    half = yprev_interpolated + ((yfin_interpolated - yprev_interpolated) / 2); // This threshold decided whether look next pix or previous one.
+                    if (i >= half && y_sc != yfin_downsampled - 1)
+                    {
+                        intermediate_interpolated_image[i * proc->width + x] = (lhe->downsampled_image[y_sc * proc->width + x] * (yfin_interpolated - yprev_interpolated - i + half) + lhe->downsampled_image[(y_sc + 1) * proc->width + x] * (i - half)) / (yfin_interpolated - yprev_interpolated);
+                    }
+                    else if (i < half && y_sc != yini)
+                    {
+                        intermediate_interpolated_image[i * proc->width + x] = (lhe->downsampled_image[y_sc * proc->width + x] * (yfin_interpolated - yprev_interpolated + i - half) + lhe->downsampled_image[(y_sc - 1) * proc->width + x] * (half - i)) / (yfin_interpolated - yprev_interpolated);
+                    }
+                    else if (i >= half && y_sc == yfin_downsampled - 1 && !last_block) //Bilinear neighbouring with the next block for the last scanlines
+                    {
+                        float next_value_x = xini + (x - xini) * x_side_relation;
+                        float next_value_index = yfin * proc->width + next_value_x;
+                        int contribution = (int)((next_value_x - ((int)next_value_x)) * 100);
+                        int value = (lhe->downsampled_image[(int)next_value_index] * (100 - contribution) + lhe->downsampled_image[(int)next_value_index + 1] * contribution) / 100;
+                        int value_y = yfin + ((yfin_interpolated - yprev_interpolated) / 2); // This is an aproximation. I estimate the next ppy/2 as the same in this block.
+                        intermediate_interpolated_image[i * proc->width + x] = (lhe->downsampled_image[y_sc * proc->width + x] * (value_y - i) + value * (i - half)) / (value_y - half);
+                    }
+                    else if (i < half && y_sc == yini && !first_block) //Bilinear neighbouring with the past block for the first scanlines
+                    {
+                        float past_value_x = xini + (x - xini) * past_x_side_relation;
+                        float past_value_index = (yini - 1) * proc->width + past_value_x;
+                        int contribution = (int)((past_value_x - ((int)past_value_x)) * 100);
+                        int value = (intermediate_interpolated_image[(int)past_value_index] * (100 - contribution) + intermediate_interpolated_image[(int)past_value_index + 1] * contribution) / 100;
+                        intermediate_interpolated_image[i * proc->width + x] = (lhe->downsampled_image[y_sc * proc->width + x] * (i - (yini - 1)) + value * (half - i)) / (half - (yini - 1));
+                    }
+                    else // Nearest neighbour for the rest of cases
+                    {
+                        intermediate_interpolated_image[i * proc->width + x] = lhe->downsampled_image[y_sc * proc->width + x];
+                    }
+                }
+                else // Nearest neighbour for the rest of cases
+                {
+                    intermediate_interpolated_image[i * proc->width + x] = lhe->downsampled_image[y_sc * proc->width + x];
+                }
+            }
+            yprev_interpolated = yfin_interpolated;
+            ppp_y += gradient;
+            pr_y += gradient_pr;
+            yfin_interpolated_float += ppp_y;
+
+        } //y
+        ppp_0 += gradient_0;
+        ppp_2 += gradient_1;
+        pr_0 += gradient_0_pr;
+        pr_2 += gradient_1_pr;
+    } //x
+}
+
+/**
+ * Horizontal Adaptative Interpolation 
+ * 
+ *  This interpolation mixes Bilinear and Nearest Neighbour Interpolation. It 
+ * chooses betwen those using the perceptual relevande of the image. This
+ *  vertical interpolation must be run after the vertical.
+ * 
+ * @param *proc LHE processing parameters
+ * @param *lhe LHE image arrays
+ * @param *intermediate_interpolated_image intermediate interpolated image in y coordinate
+ * @param linesize rectangle images create a square image in ffmpeg memory. Linesize is width used by ffmpeg in memory
+ * @param block_x block x index
+ * @param block_y block y index
+ */
+static void lhe_advanced_horizontal_adaptative_interpolation(LheProcessing *proc, LheImage *lhe,
+                                                         uint8_t *intermediate_interpolated_image,
+                                                         int linesize, int block_x, int block_y, bool only_bilineal)
+{
+    uint32_t block_height, downsampled_x_side, half;
+    float gradient, gradient_0, gradient_1, gradient_pr, gradient_0_pr, gradient_1_pr,
+        ppp_x, ppp_0, ppp_1, ppp_2, ppp_3, pr_x, pr_0, pr_1, pr_2, pr_3;
+    uint32_t xini, xfin, xfin_downsampled, xprev_interpolated, xfin_interpolated,
+        yini, yfin;
+    float xfin_interpolated_float;
+    bool last_block, first_block;
+    block_height = proc->basic_block[block_y][block_x].block_height;
+    downsampled_x_side = proc->advanced_block[block_y][block_x].downsampled_x_side;
+    xini = proc->basic_block[block_y][block_x].x_ini;
+    xfin = proc->basic_block[block_y][block_x].x_fin;
+    xfin_downsampled = proc->advanced_block[block_y][block_x].x_fin_downsampled;
+    yini = proc->basic_block[block_y][block_x].y_ini;
+    yfin = proc->basic_block[block_y][block_x].y_fin;
+
+    ppp_0 = proc->advanced_block[block_y][block_x].ppp_x[TOP_LEFT_CORNER];
+    ppp_1 = proc->advanced_block[block_y][block_x].ppp_x[TOP_RIGHT_CORNER];
+    ppp_2 = proc->advanced_block[block_y][block_x].ppp_x[BOT_LEFT_CORNER];
+    ppp_3 = proc->advanced_block[block_y][block_x].ppp_x[BOT_RIGHT_CORNER];
+
+    pr_0 = proc->perceptual_relevance_x[block_y][block_x];
+    pr_1 = proc->perceptual_relevance_x[block_y][block_x + 1];
+    pr_2 = proc->perceptual_relevance_x[block_y + 1][block_x];
+    pr_3 = proc->perceptual_relevance_x[block_y + 1][block_x + 1];
+
+    if (block_x == HORIZONTAL_BLOCKS - 1)
+    {
+        last_block = true;
+    }
+    else
+    {
+        last_block = false;
+    }
+    if (block_x == 0)
+    {
+        first_block = true;
+    }
+    else
+    {
+        first_block = false;
+    }
+
+    //gradient PPPx side a
+    gradient_0 = (ppp_2 - ppp_0) / (block_height - 1.0);
+    gradient_0_pr = (pr_2 - pr_0) / (block_height - 1.0);
+    //gradient PPPx side b
+    gradient_1 = (ppp_3 - ppp_1) / (block_height - 1.0);
+    gradient_1_pr = (pr_3 - pr_1) / (block_height - 1.0);
+
+    for (int y = yini; y < yfin; y++)
+    {
+        gradient = (ppp_1 - ppp_0) / (downsampled_x_side - 1.0);
+        gradient_pr = (pr_1 - pr_0) / (downsampled_x_side - 1.0);
+        ppp_x = ppp_0;
+        pr_x = pr_0;
+        //Interpolated x coordinates
+        xprev_interpolated = xini;
+        xfin_interpolated_float = xini + ppp_x;
+
+        for (int x_sc = xini; x_sc < xfin_downsampled; x_sc++)
+        {
+            xfin_interpolated = xfin_interpolated_float + 0.5;
+
+            for (int i = xprev_interpolated; i < xfin_interpolated; i++)
+            {
+                if (pr_x < 0.251 || only_bilineal) // Bilinear
+                {
+                    half = xprev_interpolated + ((xfin_interpolated - xprev_interpolated) / 2);
+                    if (i >= half && x_sc != xfin_downsampled - 1)
+                    {
+                        lhe->component_prediction[y * linesize + i] = (intermediate_interpolated_image[y * proc->width + x_sc] * (xfin_interpolated - xprev_interpolated - i + half) + intermediate_interpolated_image[y * proc->width + x_sc + 1] * (i - half)) / (xfin_interpolated - xprev_interpolated);
+                    }
+                    else if (i < half && x_sc != xini)
+                    {
+                        lhe->component_prediction[y * linesize + i] = (intermediate_interpolated_image[y * proc->width + x_sc] * (xfin_interpolated - xprev_interpolated + i - half) + intermediate_interpolated_image[y * proc->width + x_sc - 1] * (half - i)) / (xfin_interpolated - xprev_interpolated);
+                    }
+                    else if (i >= half && x_sc == xfin_downsampled - 1 && !last_block) //Must look into the next block
+                    {
+                        int next_value_index = y * proc->width + xfin;
+                        int value_x = xfin + ((xfin_interpolated - xprev_interpolated) / 2); // This is an aproximation. I estimate the next ppy/2 as the same in this block.
+                        lhe->component_prediction[y * linesize + i] = (intermediate_interpolated_image[y * proc->width + x_sc] * (value_x - i) + intermediate_interpolated_image[next_value_index] * (i - half)) / (value_x - half);
+                    }
+                    else if (i < half && x_sc == xini && !first_block) //Must look into the past block
+                    {
+                        int past_value_index = y * linesize + (xini - 1);
+                        lhe->component_prediction[y * linesize + i] = (intermediate_interpolated_image[y * proc->width + x_sc] * (i - (xini - 1)) + lhe->component_prediction[past_value_index] * (half - i)) / (half - (xini - 1));
+                    }
+                    else
+                    {
+                        lhe->component_prediction[y * linesize + i] = intermediate_interpolated_image[y * proc->width + x_sc];
+                    }
+                }
+                else // Nearest neighbour
+                {
+                    lhe->component_prediction[y * linesize + i] = intermediate_interpolated_image[y * proc->width + x_sc];
+                }
+            }
+
+            xprev_interpolated = xfin_interpolated;
+            ppp_x += gradient;
+            pr_x += gradient_pr;
+            xfin_interpolated_float += ppp_x;
+        } //x
+        ppp_0 += gradient_0;
+        ppp_1 += gradient_1;
+        pr_0 += gradient_0_pr;
+        pr_1 += gradient_1_pr;
+    } //y
+}
+
+
 static void lhe_compute_error_for_psnr (AVCodecContext *avctx, const AVFrame *frame,
                                         uint8_t *component_original_data_Y, uint8_t *component_original_data_U, 
                                         uint8_t *component_original_data_V, uint8_t mode) 
@@ -824,21 +1081,52 @@ static void lhe_compute_error_for_psnr (AVCodecContext *avctx, const AVFrame *fr
             for (int block_x=0; block_x<total_blocks_width; block_x++) 
             { 
 
-                lhe_advanced_vertical_nearest_neighbour_interpolation (procY, lheY, intermediate_interpolated_Y,
-                                                                                   block_x, block_y);     
+                //lhe_advanced_vertical_nearest_neighbour_interpolation (procY, lheY, intermediate_interpolated_Y,
+                //                                                                   block_x, block_y);     
                                            
-                lhe_advanced_horizontal_nearest_neighbour_interpolation (procY, lheY, intermediate_interpolated_Y, 
-                                                                                        frame->linesize[0], block_x, block_y);
-                lhe_advanced_vertical_nearest_neighbour_interpolation (procUV, lheU, intermediate_interpolated_U,
-                                                                                       block_x, block_y);     
+                //lhe_advanced_horizontal_nearest_neighbour_interpolation (procY, lheY, intermediate_interpolated_Y, 
+                //                                                                        frame->linesize[0], block_x, block_y);
+
+                lhe_advanced_vertical_adaptative_interpolation(procY, lheY, intermediate_interpolated_Y,
+                                                                                   block_x, block_y, total_blocks_height, true); 
+
+                lhe_advanced_horizontal_adaptative_interpolation(procY, lheY, intermediate_interpolated_Y,
+                                                         frame->linesize[0], block_x, block_y, true);
+
+
+
+
+                //lhe_advanced_vertical_nearest_neighbour_interpolation (procUV, lheU, intermediate_interpolated_U,
+                //                                                                       block_x, block_y);     
                                 
-                lhe_advanced_horizontal_nearest_neighbour_interpolation (procUV, lheU, intermediate_interpolated_U, 
-                                                                                        frame->linesize[1], block_x, block_y);
-                lhe_advanced_vertical_nearest_neighbour_interpolation (procUV, lheV, intermediate_interpolated_V,
-                                                                                       block_x, block_y);     
+                //lhe_advanced_horizontal_nearest_neighbour_interpolation (procUV, lheU, intermediate_interpolated_U, 
+                //                                                                        frame->linesize[1], block_x, block_y);
+
+
+
+
+                lhe_advanced_vertical_adaptative_interpolation(procUV, lheU, intermediate_interpolated_U,
+                                                                                   block_x, block_y, total_blocks_height, true); 
+
+                lhe_advanced_horizontal_adaptative_interpolation(procUV, lheU, intermediate_interpolated_U,
+                                                         frame->linesize[1], block_x, block_y, true);
+
+
+
+
+                //lhe_advanced_vertical_nearest_neighbour_interpolation (procUV, lheV, intermediate_interpolated_V,
+                //                                                                       block_x, block_y);     
                                 
-                lhe_advanced_horizontal_nearest_neighbour_interpolation (procUV, lheV, intermediate_interpolated_V, 
-                                                                                        frame->linesize[2], block_x, block_y);
+                //lhe_advanced_horizontal_nearest_neighbour_interpolation (procUV, lheV, intermediate_interpolated_V, 
+                //                                                                        frame->linesize[2], block_x, block_y);
+
+
+
+                lhe_advanced_vertical_adaptative_interpolation(procUV, lheV, intermediate_interpolated_V,
+                                                                                   block_x, block_y, total_blocks_height, true); 
+
+                lhe_advanced_horizontal_adaptative_interpolation(procUV, lheV, intermediate_interpolated_V,
+                                                         frame->linesize[2], block_x, block_y, true);
             }
         }
     }
@@ -2064,6 +2352,44 @@ static void lhe_advanced_compute_pr_lum (LheBasicPrec *prec, LheProcessing *proc
     if (PRx>0.5f) PRx=0.5f;
     if (PRy>0.5f) PRy=0.5f;
 
+    /*bool posible_textura_x = false;
+    bool posible_textura_y = false;
+
+    if (Cx*4 > 14*4) {
+        posible_textura_x = true;
+        printf("Detectada posible textura\n");
+    }
+    if (Cy*4 > 14*4){
+        posible_textura_y = true;
+        printf("Detectada posible textura\n");
+    } 
+
+
+
+
+
+
+    if (PRx>0) {
+        PRx=PRx/(Cx*4); 
+    }
+    if (PRy>0) {
+        PRy=PRy/(Cy*4);
+    }
+
+    if (posible_textura_x){
+        if (PRx>0.4f) PRx=0.4f;
+    }
+    else {
+        if (PRx>0.5f) PRx=0.5f;
+    }
+
+    if (posible_textura_y){
+        if (PRy>0.4f) PRy=0.4f;
+    }
+    else {
+        if (PRy>0.5f) PRy=0.5f;
+    }
+*/
     //PR HISTOGRAM EXPANSION
     PRx = (PRx-PR_MIN) / PR_DIF;
             
@@ -3090,6 +3416,7 @@ static void mlhe_ip_frame_encode (LheContext *s, const AVFrame *frame,
                 if ((&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER] < (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])
                     (&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER] = ( (&s->procUV)->advanced_block[block_y][block_x].ppp_y[BOT_RIGHT_CORNER]+(&s->procUV)->advanced_block[block_y+1][block_x].ppp_y[TOP_RIGHT_CORNER])/2;
             }
+
         }
     }
 
@@ -3320,6 +3647,10 @@ static int mlhe_encode_video_ip(AVCodecContext *avctx, AVPacket *pkt,
 
     //mlhe_advanced_write_delta_frame2(avctx, pkt, total_blocks_width, total_blocks_height); 
     lhe_advanced_write_file2(avctx, pkt, image_size_Y, image_size_UV, total_blocks_width, total_blocks_height); 
+
+    if(avctx->flags&AV_CODEC_FLAG_PSNR){
+        lhe_compute_error_for_psnr (avctx, frame, component_original_data_Y, component_original_data_U, component_original_data_V, ADVANCED_LHE); 
+    }
 
     s->lheY.last_downsampled_image = s->lheY.downsampled_player_image;
     s->lheU.last_downsampled_image = s->lheU.downsampled_player_image;
